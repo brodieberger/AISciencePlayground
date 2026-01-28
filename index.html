@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Science Playground</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+</head>
+
+<body>
+  <div class="container">
+    <div class="ai-panel">
+      <h2>Lab Assistant</h2>
+
+      <div class="science-window">
+        <img id="science-team-img" src="scientists.jpg" alt="Science Team">
+      </div>
+
+      <input id="aiInput" type="text" placeholder="Ask the AI">
+      <button id="askAiBtn">Ask your Science Team</button>
+      <div id="aiOutput"></div>
+    </div>
+
+    <div class="experiment-panel">
+      <div id="game-container"></div>
+      <div style="margin-top:10px;">
+        <button id="resetBtn">Reset</button>
+        <button id="releaseBtn">Release Ball</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+
+</html>
