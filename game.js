@@ -228,7 +228,7 @@ async function askAI() {
     };
 
     try {
-        const res = await fetch("http://localhost:8000/ai_hint", {
+        const res = await fetch("http://www.brodieberger.com/ai_hint", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
