@@ -71,8 +71,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const { bodyA, bodyB } = collision;
 
         if ((bodyA === ball && bodyB === goal) || (bodyA === goal && bodyB === ball)) {
-          alert("Congrats you win!");
-          resetWorld();
+          document.getElementById("gameOverMessage").style.display = "block";
         }
       });
     });
@@ -234,7 +233,6 @@ async function askAI() {
             body: JSON.stringify(payload)
         });
         const data = await res.json();
-        console.log("AI response:", data); // debug stuff
         aiOutput.textContent = data.reply || "No reply received.";
     } catch (err) {
         console.error("AI request failed:", err);
