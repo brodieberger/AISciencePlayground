@@ -20,18 +20,13 @@ let drawing = false;
 let currentLine = null;
 
 let container;
-let ui = {};
+let onGoalReached = null;
 
-//ENTRY POINT
-export function startGame(targetContainer, uiElements = {}) {
+// ENTRY POINT
+export function startGame(targetContainer, options = {}) {
   container = targetContainer;
-  ui = uiElements;
-
+  onGoalReached = options.onGoal || null;
   init();
-
-  if (ui.resetBtn) ui.resetBtn.onclick = resetWorld;
-  if (ui.releaseBtn) ui.releaseBtn.onclick = releaseCage;
-  if (ui.askAiBtn) ui.askAiBtn.onclick = askAI;
 }
 
 // INITIALIZATION
@@ -74,8 +69,8 @@ function init() {
         (bodyA === ball && bodyB === goal) ||
         (bodyA === goal && bodyB === ball)
       ) {
-        if (ui.gameOverMessage) {
-          ui.gameOverMessage.style.display = "block";
+        if (onGoalReached) {
+          onGoalReached();
         }
       }
     });
@@ -213,8 +208,8 @@ function createGoal(w, h) {
   World.add(world, goal);
 }
 
-// BUTTON ACTIONS
-function releaseCage() {
+// ACTIONS
+export function releaseCage() {
   cageWalls.forEach((w) => World.remove(world, w));
   cageWalls = [];
 }
@@ -230,12 +225,14 @@ function resetWorld() {
   init();
 }
 
-// AI REQUEST
-async function askAI() {
-  if (!ui.aiInput || !ui.aiOutput) return;
+export function resetGame() {
+  resetWorld();
+}
 
+// AI REQUEST
+export async function askAI(userMessage) {
   const payload = {
-    user_message: ui.aiInput.value,
+    user_message: userMessage,
     ball: ball.position,
     goal: goal.position,
     lines: drawnLines
@@ -249,9 +246,9 @@ async function askAI() {
     });
 
     const data = await res.json();
-    ui.aiOutput.textContent = data.reply || "No reply received.";
+    return data.reply || "No reply received.";
   } catch (err) {
     console.error("AI request failed:", err);
-    ui.aiOutput.textContent = "AI request failed.";
+    return "AI request failed.";
   }
 }

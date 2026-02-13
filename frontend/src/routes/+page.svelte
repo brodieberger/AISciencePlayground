@@ -1,13 +1,16 @@
-<script>
-	import { goto } from '$app/navigation';
-
-	function startPhysics() {
-		goto('/physics');
-	}
-</script>
-
 <h1>AI Science Playground</h1>
 
-<button on:click={startPhysics}>
+<a class="nav-button" href="/physics">
 	Start Physics Sandbox
-</button>
+</a>
+
+<style>
+	.nav-button {
+		display: inline-block;
+		padding: 8px 16px;
+		background: #1f2937;
+		color: white;
+		text-decoration: none;
+		border-radius: 4px;
+	}
+</style>

@@ -1,54 +1,54 @@
-<script>
-	import { onMount, onDestroy } from "svelte";
-	import { startGame } from "$lib/physics/game";
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import ResetButton from '$lib/components/ResetButton.svelte';
+	import { startGame, resetGame, releaseCage, askAI } from '$lib/physics/game';
 
-	let gameContainer;
+	let gameContainer: HTMLDivElement;
 
-	// UI elements passed into the physics engine
-	let resetBtn;
-	let releaseBtn;
-	let askAiBtn;
-	let aiInput;
-	let aiOutput;
-	let gameOverMessage;
+	let aiPrompt = '';
+	let aiResponse = '';
+	let goalReached = false;
 
 	onMount(() => {
 		startGame(gameContainer, {
-			resetBtn,
-			releaseBtn,
-			askAiBtn,
-			aiInput,
-			aiOutput,
-			gameOverMessage
+			onGoal: () => {
+				goalReached = true;
+			}
 		});
 	});
+
+	function handleReset() {
+		resetGame();
+		goalReached = false;
+		aiResponse = '';
+	}
+
+	async function handleAskAI() {
+		if (!aiPrompt.trim()) return;
+
+		aiResponse = await askAI(aiPrompt);
+		aiPrompt = '';
+	}
 </script>
 
 <h2>Physics Sandbox</h2>
 
 <div class="ui">
-	<button bind:this={resetBtn}>Reset</button>
-	<button bind:this={releaseBtn}>Release Cage</button>
+	<ResetButton onclick={handleReset} />
+	<button on:click={releaseCage}>Release Cage</button>
 </div>
 
 <div class="ai-panel">
-	<input
-		bind:this={aiInput}
-		type="text"
-		placeholder="Ask the AI for help..."
-	/>
-	<button bind:this={askAiBtn}>Ask AI</button>
-	<p bind:this={aiOutput} class="ai-output"></p>
+	<input type="text" placeholder="Ask the AI for help..." bind:value={aiPrompt} />
+	<button on:click={handleAskAI}>Ask AI</button>
+	<p class="ai-output">{aiResponse}</p>
 </div>
 
-<p bind:this={gameOverMessage} class="game-over">
-	Goal reached!
-</p>
+{#if goalReached}
+	<p class="game-over">Goal reached!</p>
+{/if}
 
-<div
-	class="game-container"
-	bind:this={gameContainer}
-></div>
+<div class="game-container" bind:this={gameContainer}></div>
 
 <style>
 	.game-container {
@@ -78,7 +78,6 @@
 	}
 
 	.game-over {
-		display: none;
 		color: #00ff88;
 		font-weight: bold;
 		margin-bottom: 6px;
