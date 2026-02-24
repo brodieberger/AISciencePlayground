@@ -1,5 +1,10 @@
 // @ts-nocheck
 import Matter from "matter-js";
+import {
+  createBounds,
+  createBallAndCage,
+  createGoal
+} from "./level-creation.js";
 
 const {
   Engine,
@@ -57,9 +62,14 @@ function init() {
   Runner.run(runner, engine);
 
   setupOverlay(w, h);
-  createBounds(w, h);
-  createBallAndCage(w, h);
-  createGoal(w, h);
+
+  createBounds(world, w, h);
+
+  const ballData = createBallAndCage(world, w, h);
+  ball = ballData.ball;
+  cageWalls = ballData.cageWalls;
+
+  goal = createGoal(world, w, h);
 
   Events.on(engine, "afterUpdate", redrawLines);
 
@@ -156,56 +166,6 @@ function redrawLines() {
   });
 
   overlayCtx.shadowBlur = 0;
-}
-
-// WORLD CREATION
-function createBounds(w, h) {
-  const t = 50;
-  World.add(world, [
-    Bodies.rectangle(w / 2, h + t / 2, w, t, { isStatic: true }),
-    Bodies.rectangle(-t / 2, h / 2, t, h, { isStatic: true }),
-    Bodies.rectangle(w + t / 2, h / 2, t, h, { isStatic: true })
-  ]);
-}
-
-function createBallAndCage(w, h) {
-  const cx = w * 0.25;
-  const cy = h * 0.25;
-  const size = 80;
-  const thickness = 6;
-
-  ball = Bodies.circle(cx, cy, 14, {
-    restitution: 0.8,
-    render: { fillStyle: "#ffffff" }
-  });
-
-  cageWalls = [
-    Bodies.rectangle(cx, cy - size / 2, size, thickness, cageStyle()),
-    Bodies.rectangle(cx, cy + size / 2, size, thickness, cageStyle()),
-    Bodies.rectangle(cx - size / 2, cy, thickness, size, cageStyle()),
-    Bodies.rectangle(cx + size / 2, cy, thickness, size, cageStyle())
-  ];
-
-  World.add(world, [ball, ...cageWalls]);
-}
-
-function cageStyle() {
-  return {
-    isStatic: true,
-    render: {
-      fillStyle: "#00ffff",
-      strokeStyle: "#99ffff",
-      lineWidth: 2
-    }
-  };
-}
-
-function createGoal(w, h) {
-  goal = Bodies.rectangle(w * 0.75, h * 0.85, 80, 20, {
-    isStatic: true,
-    render: { fillStyle: "#00ff88" }
-  });
-  World.add(world, goal);
 }
 
 // ACTIONS
