@@ -1,4 +1,4 @@
-import Matter from "matter-js"; 
+import Matter from "matter-js";
 
 import {
   createBounds,
@@ -30,11 +30,11 @@ let overlayCtx: CanvasRenderingContext2D;
 let drawing = false;
 let currentLine:
   | {
-      x1: number;
-      y1: number;
-      x2: number;
-      y2: number;
-    }
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+  }
   | null = null;
 
 let container: HTMLElement;
@@ -80,10 +80,23 @@ function init() {
   setupOverlay(w, h);
 
   createBounds(world, w, h);
-  createBallAndCage(world, w, h);
-  createGoal(world, w, h);
+  ball = createBallAndCage(world, w, h);
+  goal = createGoal(world, w, h);
 
   Events.on(engine, "afterUpdate", redrawLines);
+
+  Events.on(engine, "collisionStart", (event) => {
+    event.pairs.forEach(({ bodyA, bodyB }) => {
+      if (
+        (bodyA === ball && bodyB === goal) ||
+        (bodyA === goal && bodyB === ball)
+      ) {
+        if (onGoalReached) {
+          onGoalReached();
+        }
+      }
+    });
+  });
 }
 
 // OVERLAY DRAWING
@@ -195,8 +208,8 @@ export function resetGame() {
 export async function askAI(userMessage: string) {
   const payload = {
     user_message: userMessage,
-    //ball: ball.position,
-    //goal: goal.position,
+    ball: ball.position,
+    goal: goal.position,
     lines: drawnLines
   };
 

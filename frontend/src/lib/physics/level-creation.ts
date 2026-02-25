@@ -1,6 +1,6 @@
 import Matter from "matter-js";
 
-const { World, Bodies, Body } = Matter;
+const { World, Bodies } = Matter;
 
 export let cageWalls: Matter.Body[] = [];
 
@@ -36,6 +36,7 @@ export function createBallAndCage(world: Matter.World, w: number, h: number) {
   ];
 
   World.add(world, [ball, ...cageWalls]);
+  return ball;
 }
 
 function cageStyle() {
@@ -56,4 +57,5 @@ export function createGoal(world: Matter.World, w: number, h: number) {
   });
 
   World.add(world, goal);
+  return goal;
 }
