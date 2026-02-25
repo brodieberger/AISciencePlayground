@@ -7,6 +7,8 @@ import {
   cageWalls
 } from "./level-creation";
 
+import { levels } from "./level-data";
+
 const { Engine, World, Render, Runner, Bodies, Events, Body } = Matter;
 
 let engine: Matter.Engine;
@@ -16,6 +18,10 @@ let runner: Matter.Runner;
 
 let ball: Matter.Body;
 let goal: Matter.Body;
+
+export const gameState = $state({
+  currentLevelIndex: 0
+});
 
 let drawnLines: {
   x1: number;
@@ -80,8 +86,10 @@ function init() {
   setupOverlay(w, h);
 
   createBounds(world, w, h);
-  ball = createBallAndCage(world, w, h);
-  goal = createGoal(world, w, h);
+
+  let level = levels[gameState.currentLevelIndex];
+  ball = createBallAndCage(world, level);
+  goal = createGoal(world, level);
 
   Events.on(engine, "afterUpdate", redrawLines);
 
@@ -202,6 +210,11 @@ function resetWorld() {
 
 export function resetGame() {
   resetWorld();
+}
+
+export function levelUp() {
+  gameState.currentLevelIndex++;
+  resetGame();
 }
 
 // AI REQUEST

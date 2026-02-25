@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import ResetButton from '$lib/components/ResetButton.svelte';
-	import { startGame, resetGame, askAI, releaseCage } from '$lib/physics/game';
-	import {  } from '$lib/physics/level-creation';
+	import { startGame, resetGame, askAI, releaseCage, levelUp, gameState } from '$lib/physics/game.svelte';
 
 	let gameContainer: HTMLDivElement;
 
@@ -14,7 +13,7 @@
 		startGame(gameContainer, {
 			onGoal: () => {
 				goalReached = true;
-			}
+			} 
 		});
 	});
 
@@ -37,6 +36,8 @@
 <div class="ui">
 	<ResetButton onclick={handleReset} />
 	<button on:click={releaseCage}>Release Cage</button>
+	<button on:click={levelUp}>Next Level</button>
+	<p>current level: {gameState.currentLevelIndex + 1}</p>
 </div>
 
 <div class="ai-panel">
