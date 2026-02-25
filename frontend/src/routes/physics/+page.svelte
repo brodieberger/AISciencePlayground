@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import ResetButton from '$lib/components/ResetButton.svelte';
-	import { startGame, resetGame, releaseCage, askAI } from '$lib/physics/game';
+	import { startGame, resetGame, askAI, releaseCage } from '$lib/physics/game';
+	import {  } from '$lib/physics/level-creation';
 
 	let gameContainer: HTMLDivElement;
 

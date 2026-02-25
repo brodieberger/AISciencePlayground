@@ -1,9 +1,10 @@
-// @ts-nocheck
 import Matter from "matter-js";
 
-const { World, Bodies } = Matter;
+const { World, Bodies, Body } = Matter;
 
-export function createBounds(world, w, h) {
+export let cageWalls: Matter.Body[] = [];
+
+export function createBounds(world: Matter.World, w: number, h: number) {
   const t = 50;
 
   const bounds = [
@@ -16,7 +17,7 @@ export function createBounds(world, w, h) {
   return bounds;
 }
 
-export function createBallAndCage(world, w, h) {
+export function createBallAndCage(world: Matter.World, w: number, h: number) {
   const cx = w * 0.25;
   const cy = h * 0.25;
   const size = 80;
@@ -27,7 +28,7 @@ export function createBallAndCage(world, w, h) {
     render: { fillStyle: "#ffffff" }
   });
 
-  const cageWalls = [
+  cageWalls = [
     Bodies.rectangle(cx, cy - size / 2, size, thickness, cageStyle()),
     Bodies.rectangle(cx, cy + size / 2, size, thickness, cageStyle()),
     Bodies.rectangle(cx - size / 2, cy, thickness, size, cageStyle()),
@@ -35,8 +36,6 @@ export function createBallAndCage(world, w, h) {
   ];
 
   World.add(world, [ball, ...cageWalls]);
-
-  return { ball, cageWalls };
 }
 
 function cageStyle() {
@@ -50,12 +49,11 @@ function cageStyle() {
   };
 }
 
-export function createGoal(world, w, h) {
+export function createGoal(world: Matter.World, w: number, h: number) {
   const goal = Bodies.rectangle(w * 0.75, h * 0.85, 80, 20, {
     isStatic: true,
     render: { fillStyle: "#00ff88" }
   });
 
   World.add(world, goal);
-  return goal;
 }

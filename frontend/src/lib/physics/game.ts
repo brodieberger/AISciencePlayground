@@ -1,34 +1,50 @@
-// @ts-nocheck
-import Matter from "matter-js";
+import Matter from "matter-js"; 
+
 import {
   createBounds,
   createBallAndCage,
-  createGoal
-} from "./level-creation.js";
+  createGoal,
+  cageWalls
+} from "./level-creation";
 
-const {
-  Engine,
-  Render,
-  Runner,
-  World,
-  Bodies,
-  Events
-} = Matter;
+const { Engine, World, Render, Runner, Bodies, Events, Body } = Matter;
 
-let engine, world, render, runner;
-let ball, goal;
-let cageWalls = [];
-let drawnLines = [];
+let engine: Matter.Engine;
+let world: Matter.World;
+let render: Matter.Render;
+let runner: Matter.Runner;
 
-let overlayCanvas, overlayCtx;
+let ball: Matter.Body;
+let goal: Matter.Body;
+
+let drawnLines: {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}[] = [];
+
+let overlayCanvas: HTMLCanvasElement;
+let overlayCtx: CanvasRenderingContext2D;
+
 let drawing = false;
-let currentLine = null;
+let currentLine:
+  | {
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+    }
+  | null = null;
 
-let container;
-let onGoalReached = null;
+let container: HTMLElement;
+let onGoalReached: (() => void) | null = null;
 
 // ENTRY POINT
-export function startGame(targetContainer, options = {}) {
+export function startGame(
+  targetContainer: HTMLElement,
+  options: { onGoal?: () => void } = {}
+) {
   container = targetContainer;
   onGoalReached = options.onGoal || null;
   init();
@@ -37,8 +53,8 @@ export function startGame(targetContainer, options = {}) {
 // INITIALIZATION
 function init() {
   engine = Engine.create();
+  engine.gravity.y = 2;
   world = engine.world;
-  world.gravity.y = 2;
 
   const w = container.clientWidth;
   const h = container.clientHeight;
@@ -55,7 +71,7 @@ function init() {
   });
 
   render.canvas.style.position = "absolute";
-  render.canvas.style.zIndex = 1;
+  render.canvas.style.zIndex = "1";
 
   Render.run(render);
   runner = Runner.create();
@@ -64,41 +80,27 @@ function init() {
   setupOverlay(w, h);
 
   createBounds(world, w, h);
-
-  const ballData = createBallAndCage(world, w, h);
-  ball = ballData.ball;
-  cageWalls = ballData.cageWalls;
-
-  goal = createGoal(world, w, h);
+  createBallAndCage(world, w, h);
+  createGoal(world, w, h);
 
   Events.on(engine, "afterUpdate", redrawLines);
-
-  Events.on(engine, "collisionStart", (event) => {
-    event.pairs.forEach(({ bodyA, bodyB }) => {
-      if (
-        (bodyA === ball && bodyB === goal) ||
-        (bodyA === goal && bodyB === ball)
-      ) {
-        if (onGoalReached) {
-          onGoalReached();
-        }
-      }
-    });
-  });
 }
 
 // OVERLAY DRAWING
-function setupOverlay(w, h) {
+function setupOverlay(w: number, h: number) {
   overlayCanvas = document.createElement("canvas");
   overlayCanvas.width = w;
   overlayCanvas.height = h;
   overlayCanvas.style.position = "absolute";
-  overlayCanvas.style.top = 0;
-  overlayCanvas.style.left = 0;
-  overlayCanvas.style.zIndex = 10;
+  overlayCanvas.style.top = "0";
+  overlayCanvas.style.left = "0";
+  overlayCanvas.style.zIndex = "10";
 
   container.appendChild(overlayCanvas);
-  overlayCtx = overlayCanvas.getContext("2d");
+
+  const ctx = overlayCanvas.getContext("2d");
+  if (!ctx) throw new Error("Could not get 2D context");
+  overlayCtx = ctx;
 
   overlayCanvas.addEventListener("mousedown", startDrawing);
   overlayCanvas.addEventListener("mousemove", drawLine);
@@ -106,7 +108,7 @@ function setupOverlay(w, h) {
   overlayCanvas.addEventListener("mouseleave", stopDrawing);
 }
 
-function startDrawing(e) {
+function startDrawing(e: MouseEvent) {
   drawing = true;
   currentLine = {
     x1: e.offsetX,
@@ -116,8 +118,8 @@ function startDrawing(e) {
   };
 }
 
-function drawLine(e) {
-  if (!drawing) return;
+function drawLine(e: MouseEvent) {
+  if (!drawing || !currentLine) return;
   currentLine.x2 = e.offsetX;
   currentLine.y2 = e.offsetY;
 }
@@ -170,18 +172,18 @@ function redrawLines() {
 
 // ACTIONS
 export function releaseCage() {
-  cageWalls.forEach((w) => World.remove(world, w));
-  cageWalls = [];
+  cageWalls.forEach((wall) => World.remove(world, wall));
 }
 
 function resetWorld() {
   Render.stop(render);
   Runner.stop(runner);
-  World.clear(world);
+  World.clear(world, true);
   Engine.clear(engine);
+
   container.innerHTML = "";
   drawnLines = [];
-  cageWalls = [];
+
   init();
 }
 
@@ -190,11 +192,11 @@ export function resetGame() {
 }
 
 // AI REQUEST
-export async function askAI(userMessage) {
+export async function askAI(userMessage: string) {
   const payload = {
     user_message: userMessage,
-    ball: ball.position,
-    goal: goal.position,
+    //ball: ball.position,
+    //goal: goal.position,
     lines: drawnLines
   };
 
