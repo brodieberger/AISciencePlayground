@@ -1,10 +1,10 @@
 import { json } from '@sveltejs/kit';
 import OpenAI from 'openai';
 
-// Point the client to your Mac's local Ollama instance
+// Point the client directly to the desktop's Tailscale IP
 const openai = new OpenAI({
-    baseURL: 'http://localhost:11434/v1',
-    apiKey: 'ollama-local', // Required by the SDK, but ignored by Ollama
+    baseURL: 'http://100.83.47.11:11434/v1',
+    apiKey: 'ollama-local', // 
 });
 
 export async function POST({ request }) {
