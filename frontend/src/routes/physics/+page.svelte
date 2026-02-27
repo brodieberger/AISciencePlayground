@@ -1,49 +1,46 @@
 <script lang="ts">
 	import { startGame } from '$lib/physics/game.svelte';
 	import { uiState } from '$lib/game-ui.svelte';
-	import GameLayout from '$lib/components/GameLayout.svelte';
-	import GameControls from '$lib/components/GameControls.svelte';
+	import GameShell from '$lib/components/GameShell.svelte';
 	import AIPanel from '$lib/components/AIPanel.svelte';
+	import GameControls from '$lib/components/GameControls.svelte';
 	import GoalBanner from '$lib/components/GoalBanner.svelte';
 
 	let gameContainer: HTMLDivElement;
 
 	$effect(() => {
+		if (!gameContainer) return;
+
 		startGame(gameContainer, {
-			onGoal: () => {
-				uiState.goalReached = true;
-			}
+			onGoal: () => (uiState.goalReached = true)
 		});
 	});
 </script>
 
-<GameLayout>
-	{#snippet title()}
-		Physics Sandbox
-	{/snippet}
-
-	{#snippet controls()}
-		<GameControls />
-	{/snippet}
-
+<GameShell>
 	{#snippet ai()}
+		<h2>Lab Assistant</h2>
 		<AIPanel />
 	{/snippet}
 
-	{#snippet status()}
+	{#snippet experiment()}
 		<GoalBanner />
+
+		<div class="game-container" bind:this={gameContainer}></div>
+
+		<GameControls />
 	{/snippet}
-
-	<div class="game-container" bind:this={gameContainer}></div>
-</GameLayout>
-
+</GameShell>
 
 <style>
-	.game-container {
-		position: relative;
-		width: 800px;
-		height: 600px;
-		border: 1px solid #444;
-		background: #0b1020;
-	}
+	
+.game-container {
+	flex: 1;            
+	width: 100%;
+	background-color: #0a0f1a;
+	border: 2px solid #333;
+	border-radius: 6px;
+	box-shadow: 0 0 16px #000 inset;
+	position: relative;
+}
 </style>
