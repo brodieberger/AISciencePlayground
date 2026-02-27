@@ -1,87 +1,49 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import ResetButton from '$lib/components/ResetButton.svelte';
-	import { startGame, resetGame, askAI, releaseCage, levelUp, gameState } from '$lib/physics/game.svelte';
+	import { startGame } from '$lib/physics/game.svelte';
+	import { uiState } from '$lib/game-ui.svelte';
+	import GameLayout from '$lib/components/GameLayout.svelte';
+	import GameControls from '$lib/components/GameControls.svelte';
+	import AIPanel from '$lib/components/AIPanel.svelte';
+	import GoalBanner from '$lib/components/GoalBanner.svelte';
 
 	let gameContainer: HTMLDivElement;
 
-	let aiPrompt = '';
-	let aiResponse = '';
-	let goalReached = false;
-
-	onMount(() => {
+	$effect(() => {
 		startGame(gameContainer, {
 			onGoal: () => {
-				goalReached = true;
-			} 
+				uiState.goalReached = true;
+			}
 		});
 	});
-
-	function handleReset() {
-		resetGame();
-		goalReached = false;
-		aiResponse = '';
-	}
-
-	async function handleAskAI() {
-		if (!aiPrompt.trim()) return;
-
-		aiResponse = await askAI(aiPrompt);
-		aiPrompt = '';
-	}
 </script>
 
-<h2>Physics Sandbox</h2>
+<GameLayout>
+	{#snippet title()}
+		Physics Sandbox
+	{/snippet}
 
-<div class="ui">
-	<ResetButton onclick={handleReset} />
-	<button on:click={releaseCage}>Release Cage</button>
-	<button on:click={levelUp}>Next Level</button>
-	<p>current level: {gameState.currentLevelIndex + 1}</p>
-</div>
+	{#snippet controls()}
+		<GameControls />
+	{/snippet}
 
-<div class="ai-panel">
-	<input type="text" placeholder="Ask the AI for help..." bind:value={aiPrompt} />
-	<button on:click={handleAskAI}>Ask AI</button>
-	<p class="ai-output">{aiResponse}</p>
-</div>
+	{#snippet ai()}
+		<AIPanel />
+	{/snippet}
 
-{#if goalReached}
-	<p class="game-over">Goal reached!</p>
-{/if}
+	{#snippet status()}
+		<GoalBanner />
+	{/snippet}
 
-<div class="game-container" bind:this={gameContainer}></div>
+	<div class="game-container" bind:this={gameContainer}></div>
+</GameLayout>
+
 
 <style>
 	.game-container {
 		position: relative;
 		width: 800px;
 		height: 600px;
-		margin-top: 12px;
 		border: 1px solid #444;
 		background: #0b1020;
-	}
-
-	.ui {
-		display: flex;
-		gap: 8px;
-		margin-bottom: 8px;
-	}
-
-	.ai-panel {
-		margin: 8px 0;
-		display: flex;
-		gap: 8px;
-		align-items: center;
-	}
-
-	.ai-output {
-		color: #66ccff;
-	}
-
-	.game-over {
-		color: #00ff88;
-		font-weight: bold;
-		margin-bottom: 6px;
 	}
 </style>

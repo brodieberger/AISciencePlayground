@@ -23,7 +23,7 @@ export function createBallAndCage(
     level: LevelConfig
 ) {
     const { x, y } = level.ball;
-    const size = 80;
+    const size = 40;
     const thickness = 6;
 
     const ball = Bodies.circle(x, y, 14, {

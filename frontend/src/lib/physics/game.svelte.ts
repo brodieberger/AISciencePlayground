@@ -64,6 +64,7 @@ function init() {
 
   const w = container.clientWidth;
   const h = container.clientHeight;
+  console.log("Size:", w, h);
 
   render = Render.create({
     element: container,
