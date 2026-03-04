@@ -11,6 +11,8 @@
 </script>
 
 <div class="ai-panel">
+<img src="/scientists.jpg" alt="AI Panel Image" class="ai-image" />
+
 	<input
 		type="text"
 		placeholder="Ask the AI for help..."
@@ -64,5 +66,15 @@ button:hover {
 	min-height: 60px;
 	box-shadow: inset 0 0 8px #000;
 	overflow-wrap: break-word;
+}
+
+.ai-image {
+	width: 100%;
+	height: auto;
+	max-width: 767px;
+	max-height: 506px;
+	margin: 10px 0;
+	border-radius: 8px;
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 </style>
