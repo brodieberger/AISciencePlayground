@@ -6,6 +6,9 @@
 <a class="nav-button" href="/circuitry">
 	Start Circuitry Sandbox
 </a>
+<a class="nav-button" href="/chemistry">
+	Start Chemistry Sandbox
+</a>
 
 
 <style>
