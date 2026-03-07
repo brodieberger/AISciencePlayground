@@ -3,7 +3,7 @@
 	import { uiState } from '$lib/game-ui.svelte';
 	import GameShell from '$lib/components/GameShell.svelte';
 	import AIPanel from '$lib/components/AIPanel.svelte';
-	import GameControls from '$lib/components/GameControls.svelte';
+	import GameControls from './GameControls.svelte';
 	import GoalBanner from '$lib/components/GoalBanner.svelte';
 
 	let gameContainer: HTMLDivElement;

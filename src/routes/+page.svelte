@@ -3,6 +3,10 @@
 <a class="nav-button" href="/physics">
 	Start Physics Sandbox
 </a>
+<a class="nav-button" href="/circuitry">
+	Start Circuitry Sandbox
+</a>
+
 
 <style>
 	.nav-button {
