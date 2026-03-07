@@ -56,63 +56,32 @@ export const levels: CircuitLevel[] = [
     {
         id: 'level_1',
         name: 'Light the Bulb',
-        description: 'Connect the battery to the light bulb using wires.',
+        description: 'Select Wire from inventory, then click cells to connect the battery to the bulb.',
         goal: 'light_bulbs',
         gridRows: 5,
         gridCols: 7,
-        fixedCells: [
-            {
-                row: 2, col: 0,
-                component: { type: 'battery', connections: ['east'], state: {}, energized: false, fixed: true },
-            },
-            {
-                row: 2, col: 6,
-                component: { type: 'light', connections: ['west'], state: {}, energized: false, lit: false, fixed: true },
-            },
-        ],
-        availableComponents: ['wire', 'empty'],
+        fixedCells: [],
+        availableComponents: ['battery', 'wire', 'light', 'empty'],
     },
     {
         id: 'level_2',
         name: 'Switch Control',
-        description: 'Place a switch in the wire path to control the light.',
+        description: 'Place a switch in the wire path, then click it to toggle the light.',
         goal: 'light_bulbs',
         gridRows: 5,
         gridCols: 7,
-        fixedCells: [
-            {
-                row: 2, col: 0,
-                component: { type: 'battery', connections: ['east'], state: {}, energized: false, fixed: true },
-            },
-            {
-                row: 2, col: 6,
-                component: { type: 'light', connections: ['west'], state: {}, energized: false, lit: false, fixed: true },
-            },
-        ],
-        availableComponents: ['wire', 'switch', 'empty'],
+        fixedCells: [],
+        availableComponents: ['battery', 'wire', 'switch', 'light', 'empty'],
     },
     {
         id: 'level_3',
         name: 'Two Bulbs',
-        description: 'Light both bulbs using the available components.',
+        description: 'Light both bulbs. You can place multiple lights and branch the circuit.',
         goal: 'light_bulbs',
         gridRows: 7,
         gridCols: 7,
-        fixedCells: [
-            {
-                row: 3, col: 0,
-                component: { type: 'battery', connections: ['east'], state: {}, energized: false, fixed: true },
-            },
-            {
-                row: 1, col: 6,
-                component: { type: 'light', connections: ['west'], state: {}, energized: false, lit: false, fixed: true },
-            },
-            {
-                row: 5, col: 6,
-                component: { type: 'light', connections: ['west'], state: {}, energized: false, lit: false, fixed: true },
-            },
-        ],
-        availableComponents: ['wire', 'switch', 'empty'],
+        fixedCells: [],
+        availableComponents: ['battery', 'wire', 'switch', 'light', 'resistor', 'empty'],
     },
 ];
 
@@ -285,17 +254,27 @@ export function toggleSandbox() {
     resolve();
 }
 
+const DEFAULT_CONNECTIONS: Record<ComponentType, Direction[]> = {
+    battery:  ['east', 'west'],
+    wire:     ['east', 'west'],
+    switch:   ['east', 'west'],
+    light:    ['east', 'west'],
+    resistor: ['east', 'west'],
+    empty:    [],
+};
+
 export function placeComponent(
     row: number,
     col: number,
     type: ComponentType,
-    connections: Direction[] = ['east', 'west']
+    connections?: Direction[]
 ) {
     const cell = gameState.grid[row]?.[col];
     if (!cell || cell.component.fixed) return;
+    const conns = connections ?? DEFAULT_CONNECTIONS[type] ?? ['east', 'west'];
     cell.component = {
         type,
-        connections,
+        connections: conns,
         state: type === 'switch' ? { open: false } : {},
         energized: false,
         ...(type === 'light' ? { lit: false } : {}),

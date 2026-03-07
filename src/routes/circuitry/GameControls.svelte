@@ -1,5 +1,4 @@
 <!-- src/routes/circuitry/GameControls.svelte -->
-<!-- Mirrors the physics GameControls.svelte style exactly -->
 
 <script lang="ts">
     import {
@@ -12,169 +11,348 @@
     } from '$lib/circuitry/game.svelte';
     import { uiState } from '$lib/game-ui.svelte';
 
+    let { selected = $bindable<ComponentType>('wire') }: { selected: ComponentType } = $props();
+
     function handleReset() {
         resetGame();
         uiState.goalReached = false;
         uiState.aiResponse = '';
     }
 
-    // Component palette — driven by available components for the current level
-    const LABELS: Record<ComponentType, string> = {
-        empty:    'Erase',
-        wire:     'Wire',
-        battery:  'Battery',
-        switch:   'Switch',
-        light:    'Bulb',
-        resistor: 'Resistor',
-    };
+    // ── Inventory definition ─────────────────────────────────────────────────
+    // All possible components the player might ever see, with display metadata.
+    // Visibility is filtered by the current level's availableComponents,
+    // but battery/light are always shown (read-only reference) so the player
+    // knows what they're working with.
 
-    let { selected = $bindable('wire') }: { selected: ComponentType } = $props();
+    const COMPONENT_META: {
+        type: ComponentType;
+        label: string;
+        icon: string;
+        description: string;
+        color: string;
+    }[] = [
+        {
+            type: 'battery',
+            label: 'Battery',
+            icon: '🔋',
+            description: 'Power source. Fixed on the board.',
+            color: '#2a6a2a',
+        },
+        {
+            type: 'wire',
+            label: 'Wire',
+            icon: '⬜',
+            description: 'Conducts current between components.',
+            color: '#2a5a8a',
+        },
+        {
+            type: 'switch',
+            label: 'Switch',
+            icon: '⚡',
+            description: 'Click placed switches to open/close.',
+            color: '#6a3a8a',
+        },
+        {
+            type: 'light',
+            label: 'Bulb',
+            icon: '💡',
+            description: 'Lights up when current flows through it.',
+            color: '#8a7a20',
+        },
+        {
+            type: 'resistor',
+            label: 'Resistor',
+            icon: '▬',
+            description: 'Limits current. Prevents short circuits.',
+            color: '#8a4a20',
+        },
+        {
+            type: 'empty',
+            label: 'Eraser',
+            icon: '✕',
+            description: 'Remove a placed component.',
+            color: '#6a2a2a',
+        },
+    ];
 
     let currentLevel = $derived(levels[gameState.currentLevelIndex]);
-    let palette = $derived(currentLevel?.availableComponents ?? ['wire', 'empty']);
+
+    // All items available to place this level (battery excluded — it's fixed)
+    let placeable = $derived(
+        new Set(currentLevel?.availableComponents ?? ['wire', 'empty'])
+    );
+
+    // Reference-only items (always shown but not selectable for placement)
+    let referenceOnly = $derived(
+        COMPONENT_META.filter(m => !placeable.has(m.type) && m.type !== 'empty')
+    );
+
+    // Selectable inventory items
+    let inventory = $derived(
+        COMPONENT_META.filter(m => placeable.has(m.type))
+    );
 </script>
 
-<div class="ui">
-    <!-- Component palette -->
-    <div class="palette">
-        {#each palette as type}
-            <button
-                class="palette-btn"
-                class:active={selected === type}
-                onclick={() => (selected = type)}
-            >
-                {LABELS[type]}
-            </button>
-        {/each}
+<div class="controls">
+
+    <!-- ── Inventory bank ── -->
+    <div class="section">
+        <div class="section-label">INVENTORY</div>
+        <div class="inventory-grid">
+            {#each inventory as item}
+                <button
+                    class="inv-item"
+                    class:active={selected === item.type}
+                    style="--accent: {item.color};"
+                    onclick={() => (selected = item.type)}
+                    title={item.description}
+                >
+                    <span class="inv-icon">{item.icon}</span>
+                    <span class="inv-label">{item.label}</span>
+                    {#if selected === item.type}
+                        <span class="inv-selected-dot"></span>
+                    {/if}
+                </button>
+            {/each}
+        </div>
     </div>
 
-    <!-- Hint -->
-    {#if gameState.hint}
-        <div
-            class="hint"
-            class:hint-success={gameState.solved && !gameState.shortCircuit}
-            class:hint-error={gameState.shortCircuit}
-        >
-            {gameState.hint}
+    <!-- ── Reference components (fixed on board, non-placeable) ── -->
+    {#if referenceOnly.length > 0}
+        <div class="section">
+            <div class="section-label">ON BOARD</div>
+            <div class="inventory-grid">
+                {#each referenceOnly as item}
+                    <div
+                        class="inv-item ref-item"
+                        style="--accent: {item.color};"
+                        title={item.description}
+                    >
+                        <span class="inv-icon">{item.icon}</span>
+                        <span class="inv-label">{item.label}</span>
+                    </div>
+                {/each}
+            </div>
         </div>
     {/if}
 
-    <!-- Action buttons (same style as physics) -->
-    <div class="actions">
-        <button onclick={handleReset}>Reset</button>
-        <button onclick={toggleSandbox} class:sandbox-on={gameState.sandboxMode}>
-            {gameState.sandboxMode ? 'Sandbox: ON' : 'Sandbox: OFF'}
-        </button>
-        <button onclick={levelUp}>
-            Next Level: {gameState.currentLevelIndex + 1}
-        </button>
+    <!-- ── Right column: status + actions ── -->
+    <div class="right-col">
+        <!-- ── Hint / status ── -->
+        {#if gameState.hint}
+            <div
+                class="hint"
+                class:hint-success={gameState.solved && !gameState.shortCircuit}
+                class:hint-error={gameState.shortCircuit}
+            >
+                {gameState.hint}
+            </div>
+        {/if}
+
+        <!-- ── Light progress ── -->
+        {#if gameState.totalLights > 0}
+            <div class="progress">
+                {#each Array(gameState.totalLights) as _, i}
+                    <span class="bulb-dot" class:lit={i < gameState.activeLights}>💡</span>
+                {/each}
+                <span class="progress-label">
+                    {gameState.activeLights}/{gameState.totalLights} lit
+                </span>
+            </div>
+        {/if}
+
+        <!-- ── Action buttons ── -->
+        <div class="actions">
+            <button class="btn btn-reset" onclick={handleReset}>↺ Reset</button>
+            <button
+                class="btn btn-sandbox"
+                class:sandbox-on={gameState.sandboxMode}
+                onclick={toggleSandbox}
+            >
+                {gameState.sandboxMode ? '🔓 Sandbox' : '🔒 Sandbox'}
+            </button>
+            <button class="btn btn-next" onclick={levelUp}>
+                Next →
+            </button>
+        </div>
+
+        <!-- ── Key ── -->
+        <div class="key">
+            <span><kbd>Left click</kbd> place</span>
+            <span><kbd>Right click</kbd> remove</span>
+            <span><kbd>Click switch</kbd> toggle</span>
+        </div>
     </div>
+
 </div>
 
 <style>
-    .ui {
+    .controls {
+        display: flex;
+        flex-direction: row;
+        align-items: flex-start;
+        gap: 16px;
+        padding: 8px 4px 4px;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+    }
+
+    /* ── Section ── */
+    .section { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+    .section-label {
+        font-size: 0.6rem;
+        letter-spacing: 0.15em;
+        color: #3a6a8a;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    /* ── Inventory grid ── */
+    .inventory-grid {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        gap: 5px;
+    }
+
+    .inv-item {
+        position: relative;
         display: flex;
         flex-direction: column;
-        gap: 8px;
-        padding-top: 4px;
-    }
-
-    /* ── Palette ── */
-    .palette {
-        display: flex;
-        gap: 5px;
-        flex-wrap: wrap;
-    }
-    .palette-btn {
-        padding: 6px 12px;
-        border-radius: 4px;
-        border: 1px solid #2a4a6a;
-        background: #111c2b;
-        color: #7aaccc;
-        font-weight: bold;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        width: 58px;
+        height: 58px;
+        background: #0d1828;
+        border: 2px solid var(--accent, #2a4a6a);
+        border-radius: 8px;
         cursor: pointer;
-        transition: all 0.2s ease;
-        font-size: 0.8rem;
+        transition: all 0.15s ease;
+        padding: 4px;
+        box-sizing: border-box;
+        flex-shrink: 0;
+        font-family: inherit;
+        color: inherit;
     }
-    .palette-btn:hover {
-        background: #1a2d42;
-        border-color: #3a8aee;
-        color: #e0f0ff;
+    .inv-item:hover:not(.ref-item) {
+        background: #152030;
+        border-color: color-mix(in srgb, var(--accent) 80%, white);
+        box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 50%, transparent);
+        transform: translateY(-1px);
     }
-    .palette-btn.active {
-        background: #0a2040;
-        border-color: #3a8aee;
-        color: #e0f0ff;
-        box-shadow: 0 0 10px #3a8aee60;
+    .inv-item.active {
+        background: color-mix(in srgb, var(--accent) 20%, #0a0f1a);
+        border-color: color-mix(in srgb, var(--accent) 90%, white);
+        box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent);
+    }
+    .inv-item.ref-item {
+        cursor: default;
+        opacity: 0.55;
+        border-style: dashed;
     }
 
-    /* ── Hint ── */
+    .inv-icon {
+        font-size: 1.5rem;
+        line-height: 1;
+    }
+    .inv-label {
+        font-size: 0.62rem;
+        color: #7aaccc;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-align: center;
+        line-height: 1.1;
+    }
+    .inv-item.active .inv-label { color: #e0f0ff; }
+
+    .inv-selected-dot {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: color-mix(in srgb, var(--accent) 90%, white);
+        box-shadow: 0 0 6px var(--accent);
+    }
+
+    /* ── Right column: hint + progress + actions ── */
+    .right-col {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        flex-shrink: 0;
+        min-width: 160px;
+        max-width: 220px;
+    }
     .hint {
-        padding: 6px 10px;
+        padding: 7px 10px;
         background: #0d1828;
         border-left: 3px solid #3a8aee;
         border-radius: 3px;
-        font-size: 0.8rem;
+        font-size: 0.78rem;
         color: #9abccc;
         line-height: 1.4;
     }
-    .hint.hint-success {
-        border-color: #44ff44;
-        color: #aaeeaa;
-        background: #0a1f0a;
-    }
-    .hint.hint-error {
-        border-color: #ff6666;
-        color: #eea0a0;
-        background: #1f0a0a;
-    }
+    .hint.hint-success { border-color: #44ff44; color: #aaeeaa; background: #0a1f0a; }
+    .hint.hint-error   { border-color: #ff6666; color: #eea0a0; background: #1f0a0a; }
 
-    /* ── Action buttons — same style as physics GameControls ── */
+    /* ── Progress ── */
+    .progress {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.75rem;
+        color: #5a8aaa;
+    }
+    .bulb-dot { font-size: 0.9rem; opacity: 0.25; transition: opacity 0.2s; }
+    .bulb-dot.lit { opacity: 1; filter: drop-shadow(0 0 4px #ddbb00); }
+    .progress-label { margin-left: 4px; }
+
+    /* ── Actions ── */
     .actions {
         display: flex;
         flex-wrap: wrap;
-        gap: 0;
+        gap: 5px;
+        margin-top: 2px;
     }
-    button {
-        padding: 8px 12px;
-        margin-top: 10px;
-        margin-right: 5px;
+    .btn {
+        padding: 7px 12px;
         border-radius: 4px;
         border: none;
         font-weight: bold;
         cursor: pointer;
+        font-size: 0.78rem;
         transition: all 0.2s ease;
+        font-family: inherit;
     }
-    .actions button:nth-child(1) {
-        background-color: #ff6666;
-        color: #0b1020;
+    .btn-reset    { background-color: #ff6666; color: #0b1020; }
+    .btn-reset:hover { background-color: #ff4444; box-shadow: 0 0 12px #ff4444; }
+
+    .btn-sandbox  { background-color: #aa66cc; color: #0b1020; }
+    .btn-sandbox:hover { background-color: #9944bb; box-shadow: 0 0 12px #9944bb; }
+    .btn-sandbox.sandbox-on { background-color: #66ff66; }
+    .btn-sandbox.sandbox-on:hover { background-color: #44ff44; box-shadow: 0 0 12px #44ff44; }
+
+    .btn-next     { background-color: #66ccff; color: #0b1020; }
+    .btn-next:hover { background-color: #33aaff; box-shadow: 0 0 12px #33aaff; }
+
+    /* ── Key ── */
+    .key {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        margin-top: 2px;
     }
-    .actions button:nth-child(1):hover {
-        background-color: #ff4444;
-        box-shadow: 0 0 12px #ff4444;
-    }
-    .actions button:nth-child(2) {
-        background-color: #aa66cc;
-        color: #0b1020;
-    }
-    .actions button:nth-child(2):hover {
-        background-color: #9944bb;
-        box-shadow: 0 0 12px #9944bb;
-    }
-    .actions button:nth-child(2).sandbox-on {
-        background-color: #66ff66;
-        color: #0b1020;
-    }
-    .actions button:nth-child(2).sandbox-on:hover {
-        background-color: #44ff44;
-        box-shadow: 0 0 12px #44ff44;
-    }
-    .actions button:nth-child(3) {
-        background-color: #66ccff;
-        color: #0b1020;
-    }
-    .actions button:nth-child(3):hover {
-        background-color: #33aaff;
-        box-shadow: 0 0 12px #33aaff;
+    .key span { font-size: 0.68rem; color: #3a6a8a; display: flex; align-items: center; gap: 5px; }
+    kbd {
+        padding: 1px 5px;
+        background: #0d1828;
+        border: 1px solid #1e3550;
+        border-radius: 3px;
+        font-size: 0.65rem;
+        color: #5a8aaa;
     }
 </style>
