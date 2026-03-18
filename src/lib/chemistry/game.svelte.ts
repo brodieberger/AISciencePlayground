@@ -458,3 +458,25 @@ function stubReaction(slots: ReactionSlot[]): CompoundResult {
         fromCache: false,
     };
 }
+
+// AI REQUEST
+export async function askAI(userMessage: string) {
+  const payload = {
+    game_type: "chemistry",
+    user_message: userMessage,
+  };
+
+  try {
+    const res = await fetch("http://www.brodieberger.com/ai_hint", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    return data.reply || "No reply received.";
+  } catch (err) {
+    console.error("AI request failed:", err);
+    return "AI request failed.";
+  }
+}
