@@ -6,330 +6,339 @@ export type ComponentType =
     | 'battery'
     | 'switch'
     | 'light'
-    | 'resistor';
+    | 'resistor'
+    | 'and'
+    | 'or'
+    | 'not';
 
-export type Direction = 'north' | 'east' | 'south' | 'west';
-
-export interface CellComponent {
-    type: ComponentType;
-    connections: Direction[];
-    state: Record<string, unknown>;
-    energized: boolean;
-    lit?: boolean;
-    fixed?: boolean;
+export interface PlacedComponent {
+    type: Exclude<ComponentType, 'empty'>;
+    rotation: number;   // 0 = horizontal (E↔W), 1 = vertical (N↔S)
+    closed:   boolean;  // switches: true = closed = conducts
+    powered:  boolean;  // set by solver
+    lit:      boolean;  // lights only
 }
 
-export interface GridCell {
-    row: number;
-    col: number;
-    component: CellComponent;
-}
-
-export interface CircuitLevel {
-    id: string;
-    name: string;
-    description: string;
-    goal: string;
-    gridRows: number;
-    gridCols: number;
-    fixedCells: { row: number; col: number; component: CellComponent }[];
-    availableComponents: ComponentType[];
-}
-
-// ── Reactive game state (mirrors gameState in $lib/physics/game.svelte) ───────
-
+// ── Reactive state ────────────────────────────────────────────────────────────
 export const gameState = $state({
-    currentLevelIndex: 0,
-    grid: [] as GridCell[][],
-    solved: false,
-    shortCircuit: false,
-    openLoop: true,
-    hint: '',
-    activeLights: 0,
-    totalLights: 0,
-    sandboxMode: false,
+    components:   {} as Record<string, PlacedComponent>, // "r,c"
+    wires:        {} as Record<string, true>,             // wireKey
+    poweredEdges: {} as Record<string, true>,             // wireKey
+    solved:        false,
+    shortCircuit:  false,
+    hint:          'Place a battery, connect wires, and add a bulb.',
+    activeLights:  0,
+    totalLights:   0,
+    sandboxMode:   true,
+    // UI state
+    currentTool: 'wire' as ComponentType | 'delete',
+    rotation:    0,
+    wireStart:   null as { r: number; c: number } | null,
+    mouseCell:   null as { r: number; c: number } | null,
 });
 
-// ── Levels ────────────────────────────────────────────────────────────────────
-
-export const levels: CircuitLevel[] = [
-    {
-        id: 'level_1',
-        name: 'Light the Bulb',
-        description: 'Select Wire from inventory, then click cells to connect the battery to the bulb.',
-        goal: 'light_bulbs',
-        gridRows: 5,
-        gridCols: 7,
-        fixedCells: [],
-        availableComponents: ['battery', 'wire', 'light', 'empty'],
-    },
-    {
-        id: 'level_2',
-        name: 'Switch Control',
-        description: 'Place a switch in the wire path, then click it to toggle the light.',
-        goal: 'light_bulbs',
-        gridRows: 5,
-        gridCols: 7,
-        fixedCells: [],
-        availableComponents: ['battery', 'wire', 'switch', 'light', 'empty'],
-    },
-    {
-        id: 'level_3',
-        name: 'Two Bulbs',
-        description: 'Light both bulbs. You can place multiple lights and branch the circuit.',
-        goal: 'light_bulbs',
-        gridRows: 7,
-        gridCols: 7,
-        fixedCells: [],
-        availableComponents: ['battery', 'wire', 'switch', 'light', 'resistor', 'empty'],
-    },
-];
-
-// ── Grid helpers ──────────────────────────────────────────────────────────────
-
-function createEmptyGrid(rows: number, cols: number): GridCell[][] {
-    return Array.from({ length: rows }, (_, r) =>
-        Array.from({ length: cols }, (_, c) => ({
-            row: r,
-            col: c,
-            component: { type: 'empty' as ComponentType, connections: [], state: {}, energized: false },
-        }))
-    );
+// ── Wire key (normalised so r1≤r2, then c1≤c2) ───────────────────────────────
+export function wireKey(r1: number, c1: number, r2: number, c2: number): string {
+    if (r1 > r2 || (r1 === r2 && c1 > c2)) return `${r2},${c2},${r1},${c1}`;
+    return `${r1},${c1},${r2},${c2}`;
 }
 
-function applyFixedCells(grid: GridCell[][], fixed: CircuitLevel['fixedCells']): GridCell[][] {
-    for (const { row, col, component } of fixed) {
-        grid[row][col].component = { ...component };
-    }
-    return grid;
+// ── Directions ────────────────────────────────────────────────────────────────
+type Dir = 'N' | 'S' | 'E' | 'W';
+const DELTA: Record<Dir, [number, number]> = {
+    N: [-1, 0], S: [1, 0], E: [0, 1], W: [0, -1],
+};
+const OPP: Record<Dir, Dir> = { N: 'S', S: 'N', E: 'W', W: 'E' };
+const ALL_DIRS: Dir[] = ['N', 'S', 'E', 'W'];
+
+// Component terminals based on rotation
+// rotation 0 → E & W (horizontal)
+// rotation 1 → N & S (vertical)
+function terminals(rotation: number): [Dir, Dir] {
+    return rotation % 2 === 0 ? ['E', 'W'] : ['N', 'S'];
 }
 
-const OPPOSITE: Record<Direction, Direction> = {
-    north: 'south', south: 'north', east: 'west', west: 'east',
-};
+// ── BFS Circuit Solver ────────────────────────────────────────────────────────
+//
+// RULES:
+//  1. Power only comes from a battery.
+//  2. Current travels along wire edges OR through components whose terminals
+//     face the direction of travel.
+//  3. A switch blocks current when open (closed === false).
+//  4. A valid circuit = closed loop from battery (+) back to battery (−).
+//  5. Without a load (light/resistor) in the loop → short-circuit (unless sandbox).
+//  6. Nothing glows unless a valid loop is found.
+//
+export function solveCircuit(): void {
+    const { components, wires, sandboxMode } = gameState;
 
-const DIR_DELTA: Record<Direction, [number, number]> = {
-    north: [-1, 0], south: [1, 0], east: [0, 1], west: [0, -1],
-};
-
-// ── Circuit solver ────────────────────────────────────────────────────────────
-
-function solveCircuit(grid: GridCell[][], sandbox: boolean) {
-    const rows = grid.length;
-    const cols = grid[0]?.length ?? 0;
-
-    for (const row of grid) {
-        for (const cell of row) {
-            cell.component.energized = false;
-            if (cell.component.type === 'light') cell.component.lit = false;
-        }
+    // Reset powered state on all components
+    for (const c of Object.values(components)) {
+        c.powered = false;
+        c.lit     = false;
     }
 
-    let solved = false;
+    const poweredEdges: Record<string, true> = {};
+    let solved       = false;
     let shortCircuit = false;
-    let openLoop = true;
-    let hint = '';
-    let activeLights = 0;
-    let totalLights = 0;
+    let hint         = '';
 
-    const batteries = grid.flat().filter(c => c.component.type === 'battery');
+    const batteries = Object.entries(components).filter(([, c]) => c.type === 'battery');
 
     if (batteries.length === 0) {
-        return { solved, shortCircuit, openLoop, hint: 'No battery found.', activeLights, totalLights };
+        _apply(poweredEdges, false, false, 'Place a battery to power the circuit.');
+        return;
     }
 
-    for (const battery of batteries) {
-        const posDir = battery.component.connections[0] as Direction | undefined;
-        if (!posDir) continue;
+    outer:
+    for (const [batKey, bat] of batteries) {
+        const [br, bc] = batKey.split(',').map(Number);
+        const [posDir, negDir] = terminals(bat.rotation); // + terminal, − terminal
 
-        const sr = battery.row + DIR_DELTA[posDir][0];
-        const sc = battery.col + DIR_DELTA[posDir][1];
-        if (sr < 0 || sr >= rows || sc < 0 || sc >= cols) continue;
+        // Positive terminal leads to this neighbour cell
+        const [pdr, pdc] = DELTA[posDir];
+        const posR = br + pdr, posC = bc + pdc;
 
-        const startCell = grid[sr][sc];
-        if (!startCell.component.connections.includes(OPPOSITE[posDir])) continue;
+        // ── BFS ──────────────────────────────────────────────────────────────
+        type Node = { r: number; c: number; path: string[]; edges: string[]; hasLoad: boolean };
 
-        type Node = { cell: GridCell; path: GridCell[]; hasLoad: boolean };
-        const visited = new Set<string>([`${battery.row},${battery.col}`]);
-        const queue: Node[] = [{ cell: startCell, path: [battery, startCell], hasLoad: false }];
+        const visited = new Set<string>([batKey]);
+        const queue: Node[] = [];
 
-        outer: while (queue.length > 0) {
-            const { cell, path, hasLoad } = queue.shift()!;
-            const key = `${cell.row},${cell.col}`;
-            if (visited.has(key)) continue;
-            visited.add(key);
+        // Seed: try to leave battery via positive terminal
+        _tryEnqueue(posR, posC, br, bc, posDir, [], [], false, visited, queue, components, wires, hint);
 
-            if (cell.component.type === 'switch' && cell.component.state.open === true) {
-                hint = hint || 'A switch is open — click it to close the circuit.';
-                continue;
-            }
+        while (queue.length > 0) {
+            const node = queue.shift()!;
+            const { r, c, path, edges, hasLoad } = node;
+            const cellComp = components[`${r},${c}`];
 
-            const isLoad = cell.component.type === 'light' || cell.component.type === 'resistor';
-            const newHasLoad = hasLoad || isLoad;
+            for (const dir of ALL_DIRS) {
+                const [dr, dc] = DELTA[dir];
+                const nr = r + dr, nc = c + dc;
+                const nKey = `${nr},${nc}`;
+                const ek = wireKey(r, c, nr, nc);
 
-            for (const dir of cell.component.connections as Direction[]) {
-                const nr = cell.row + DIR_DELTA[dir][0];
-                const nc = cell.col + DIR_DELTA[dir][1];
-                if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
-                const neighbor = grid[nr][nc];
-                if (!neighbor.component.connections.includes(OPPOSITE[dir])) continue;
+                // Can we EXIT current cell in direction `dir`?
+                if (!_canExit(r, c, dir, components, wires)) continue;
 
-                if (neighbor.row === battery.row && neighbor.col === battery.col) {
-                    if (!newHasLoad && !sandbox) {
+                // Is this cell the battery's negative terminal neighbour?
+                const [ndr2, ndc2] = DELTA[negDir];
+                const negR = br + ndr2, negC = bc + ndc2;
+                if (nr === negR && nc === negC) {
+                    // Must be able to enter the battery from this side
+                    if (dir !== negDir) continue;
+
+                    if (!hasLoad && !sandboxMode) {
                         shortCircuit = true;
-                        hint = 'Short circuit! Add a load (light or resistor) between the terminals.';
+                        hint = 'Short circuit! Add a bulb or resistor to the loop.';
                         break outer;
                     }
-                    for (const c of path) {
-                        c.component.energized = true;
-                        if (c.component.type === 'light') c.component.lit = true;
-                    }
-                    openLoop = false;
+
+                    // ✓ LOOP CLOSED — energise path
                     solved = true;
+                    for (const ck of path) {
+                        const cc = components[ck];
+                        if (cc) { cc.powered = true; if (cc.type === 'light') cc.lit = true; }
+                    }
+                    for (const e of edges) poweredEdges[e as keyof typeof poweredEdges] = true;
+                    poweredEdges[ek as keyof typeof poweredEdges] = true;
+                    bat.powered = true;
                     break outer;
                 }
 
-                if (!visited.has(`${neighbor.row},${neighbor.col}`)) {
-                    queue.push({ cell: neighbor, path: [...path, neighbor], hasLoad: newHasLoad });
+                if (nKey === batKey || visited.has(nKey)) continue;
+
+                // Can we ENTER neighbour cell from direction `dir`?
+                const nComp = components[nKey];
+                let canEnter = !!wires[ek]; // wire carries us in
+                if (!canEnter && nComp && nComp.type !== 'battery') {
+                    // entering nComp from dir — it needs a terminal facing OPP[dir]
+                    const [t0, t1] = terminals(nComp.rotation);
+                    canEnter = t0 === OPP[dir] || t1 === OPP[dir];
+                    if (canEnter && nComp.type === 'switch' && !nComp.closed) {
+                        hint = hint || 'A switch is open — click it to close the circuit.';
+                        canEnter = false;
+                    }
                 }
+                if (!canEnter) continue;
+
+                visited.add(nKey);
+                const isLoad = nComp && (nComp.type === 'light' || nComp.type === 'resistor');
+                queue.push({
+                    r: nr, c: nc,
+                    path:  [...path, nKey],
+                    edges: [...edges, ek],
+                    hasLoad: hasLoad || !!isLoad,
+                });
             }
         }
     }
 
-    for (const row of grid) {
-        for (const cell of row) {
-            if (cell.component.type === 'light') {
-                totalLights++;
-                if (cell.component.lit) activeLights++;
-            }
-        }
+    if (!solved && !shortCircuit && !hint) {
+        hint = 'Circuit is open — connect all components into a closed loop.';
+    }
+    if (solved) {
+        const al = Object.values(components).filter(c => c.type === 'light' && c.lit).length;
+        const tl = Object.values(components).filter(c => c.type === 'light').length;
+        hint = tl > 0 ? `Circuit complete! All bulbs are powered.` : 'Circuit complete!';
     }
 
-    if (openLoop && !shortCircuit && !hint) {
-        hint = 'Circuit is open. Connect all components to complete the loop.';
+    _apply(poweredEdges, solved, shortCircuit, hint);
+}
+
+// Can we exit cell (r,c) in direction dir?
+function _canExit(
+    r: number, c: number, dir: Dir,
+    components: Record<string, PlacedComponent>,
+    wires: Record<string, true>,
+): boolean {
+    const [dr, dc] = DELTA[dir];
+    const ek = wireKey(r, c, r + dr, c + dc);
+    if (wires[ek]) {
+        // If there's a component here it must have a terminal in dir
+        const comp = components[`${r},${c}`];
+        if (!comp || comp.type === 'battery') return true;
+        const [t0, t1] = terminals(comp.rotation);
+        return t0 === dir || t1 === dir;
     }
-    if (solved && !shortCircuit) {
-        hint = activeLights === totalLights
-            ? '✓ Circuit complete! All bulbs are lit.'
-            : '✓ Circuit complete!';
-    }
-
-    return { solved, shortCircuit, openLoop, hint, activeLights, totalLights };
+    // No wire — can we exit through the component itself?
+    const comp = components[`${r},${c}`];
+    if (!comp || comp.type === 'battery') return false;
+    const [t0, t1] = terminals(comp.rotation);
+    return t0 === dir || t1 === dir;
 }
 
-// ── Public API (mirrors $lib/physics/game.svelte) ─────────────────────────────
-
-let _onGoal: (() => void) | undefined;
-
-export function startGame(_container: HTMLElement, opts?: { onGoal?: () => void }) {
-    _onGoal = opts?.onGoal;
-    loadLevel(gameState.currentLevelIndex);
-}
-
-function loadLevel(index: number) {
-    const level = levels[index];
-    if (!level) return;
-    const grid = applyFixedCells(createEmptyGrid(level.gridRows, level.gridCols), level.fixedCells);
-    gameState.grid = grid;
-    gameState.solved = false;
-    gameState.shortCircuit = false;
-    gameState.openLoop = true;
-    gameState.hint = level.description;
-    gameState.activeLights = 0;
-    gameState.totalLights = grid.flat().filter(c => c.component.type === 'light').length;
-}
-
-export function resetGame() {
-    loadLevel(gameState.currentLevelIndex);
-}
-
-export function levelUp() {
-    const next = (gameState.currentLevelIndex + 1) % levels.length;
-    gameState.currentLevelIndex = next;
-    loadLevel(next);
-}
-
-export function toggleSandbox() {
-    gameState.sandboxMode = !gameState.sandboxMode;
-    resolve();
-}
-
-const DEFAULT_CONNECTIONS: Record<ComponentType, Direction[]> = {
-    battery:  ['east', 'west'],
-    wire:     ['east', 'west'],
-    switch:   ['east', 'west'],
-    light:    ['east', 'west'],
-    resistor: ['east', 'west'],
-    empty:    [],
-};
-
-export function placeComponent(
-    row: number,
-    col: number,
-    type: ComponentType,
-    connections?: Direction[]
+function _tryEnqueue(
+    r: number, c: number,
+    fromR: number, fromC: number,
+    exitDir: Dir,
+    path: string[], edges: string[], hasLoad: boolean,
+    visited: Set<string>,
+    queue: { r: number; c: number; path: string[]; edges: string[]; hasLoad: boolean }[],
+    components: Record<string, PlacedComponent>,
+    wires: Record<string, true>,
+    hint: string,
 ) {
-    const cell = gameState.grid[row]?.[col];
-    if (!cell || cell.component.fixed) return;
-    const conns = connections ?? DEFAULT_CONNECTIONS[type] ?? ['east', 'west'];
-    cell.component = {
+    if (r < 0 || c < 0) return;
+    const key = `${r},${c}`;
+    if (visited.has(key)) return;
+
+    const ek = wireKey(fromR, fromC, r, c);
+    const hasWire = !!wires[ek];
+    const comp    = components[key];
+
+    let canEnter = hasWire;
+    if (!canEnter && comp && comp.type !== 'battery') {
+        const [t0, t1] = terminals(comp.rotation);
+        canEnter = t0 === OPP[exitDir] || t1 === OPP[exitDir];
+        if (canEnter && comp.type === 'switch' && !comp.closed) canEnter = false;
+    }
+    if (!canEnter) return;
+
+    visited.add(key);
+    const isLoad = comp && (comp.type === 'light' || comp.type === 'resistor');
+    queue.push({ r, c, path: [...path, key], edges: [...edges, ek], hasLoad: hasLoad || !!isLoad });
+}
+
+function _apply(pe: Record<string, true>, solved: boolean, sc: boolean, hint: string) {
+    gameState.poweredEdges = pe;
+    gameState.solved       = solved;
+    gameState.shortCircuit = sc;
+    gameState.hint         = hint;
+    gameState.activeLights = Object.values(gameState.components).filter(c => c.type === 'light' && c.lit).length;
+    gameState.totalLights  = Object.values(gameState.components).filter(c => c.type === 'light').length;
+}
+
+// ── Public actions ────────────────────────────────────────────────────────────
+
+export function selectTool(tool: ComponentType | 'delete') {
+    gameState.currentTool = tool;
+    gameState.wireStart   = null;
+}
+
+export function rotateTool() {
+    gameState.rotation = (gameState.rotation + 1) % 2;
+}
+
+export function placeComponent(r: number, c: number, type: Exclude<ComponentType, 'empty'>) {
+    gameState.components[`${r},${c}`] = {
         type,
-        connections: conns,
-        state: type === 'switch' ? { open: false } : {},
-        energized: false,
-        ...(type === 'light' ? { lit: false } : {}),
+        rotation: gameState.rotation,
+        closed:   type === 'switch' ? false : true,
+        powered:  false,
+        lit:      false,
     };
-    resolve();
+    solveCircuit();
 }
 
-export function removeComponent(row: number, col: number) {
-    placeComponent(row, col, 'empty', []);
+export function removeCell(r: number, c: number) {
+    const key = `${r},${c}`;
+    delete gameState.components[key];
+    // Remove all wire edges touching this cell
+    for (const wk of Object.keys(gameState.wires)) {
+        const [r1, c1, r2, c2] = wk.split(',').map(Number);
+        if ((r1 === r && c1 === c) || (r2 === r && c2 === c)) delete gameState.wires[wk];
+    }
+    solveCircuit();
 }
 
-export function toggleSwitch(row: number, col: number) {
-    const cell = gameState.grid[row]?.[col];
-    if (!cell || cell.component.type !== 'switch') return;
-    cell.component.state = { ...cell.component.state, open: !cell.component.state.open };
-    resolve();
+export function addWireLine(r1: number, c1: number, r2: number, c2: number) {
+    if (r1 === r2) {
+        const [lo, hi] = [Math.min(c1, c2), Math.max(c1, c2)];
+        for (let c = lo; c < hi; c++) gameState.wires[wireKey(r1, c, r1, c + 1)] = true;
+    } else if (c1 === c2) {
+        const [lo, hi] = [Math.min(r1, r2), Math.max(r1, r2)];
+        for (let r = lo; r < hi; r++) gameState.wires[wireKey(r, c1, r + 1, c1)] = true;
+    } else {
+        // L-shape: horizontal first, then vertical
+        const [loC, hiC] = [Math.min(c1, c2), Math.max(c1, c2)];
+        for (let c = loC; c < hiC; c++) gameState.wires[wireKey(r1, c, r1, c + 1)] = true;
+        const [loR, hiR] = [Math.min(r1, r2), Math.max(r1, r2)];
+        for (let r = loR; r < hiR; r++) gameState.wires[wireKey(r, c2, r + 1, c2)] = true;
+    }
+    solveCircuit();
 }
 
-function resolve() {
-    const result = solveCircuit(gameState.grid, gameState.sandboxMode);
-    gameState.solved      = result.solved;
-    gameState.shortCircuit = result.shortCircuit;
-    gameState.openLoop    = result.openLoop;
-    gameState.hint        = result.hint;
-    gameState.activeLights = result.activeLights;
-    gameState.totalLights  = result.totalLights;
-
-    const level = levels[gameState.currentLevelIndex];
-    const goalMet =
-        !result.shortCircuit &&
-        result.activeLights > 0 &&
-        result.activeLights === result.totalLights &&
-        level?.goal !== 'sandbox';
-
-    if (goalMet) _onGoal?.();
+export function removeWiresAtCell(r: number, c: number) {
+    for (const wk of Object.keys(gameState.wires)) {
+        const [r1, c1, r2, c2] = wk.split(',').map(Number);
+        if ((r1 === r && c1 === c) || (r2 === r && c2 === c)) delete gameState.wires[wk];
+    }
+    gameState.wireStart = null;
+    solveCircuit();
 }
 
-// AI REQUEST
-export async function askAI(userMessage: string) {
-  const payload = {
-    game_type: "circuitry",
-    user_message: userMessage,
-  };
+export function toggleSwitch(r: number, c: number) {
+    const comp = gameState.components[`${r},${c}`];
+    if (comp?.type !== 'switch') return;
+    comp.closed = !comp.closed;
+    solveCircuit();
+}
 
-  try {
-    const res = await fetch("http://www.brodieberger.com/ai_hint", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
+export function clearAll() {
+    gameState.components   = {};
+    gameState.wires        = {};
+    gameState.poweredEdges = {};
+    gameState.solved       = false;
+    gameState.shortCircuit = false;
+    gameState.hint         = 'Board cleared. Place components and connect them.';
+    gameState.activeLights = 0;
+    gameState.totalLights  = 0;
+    gameState.wireStart    = null;
+}
 
-    const data = await res.json();
-    return data.reply || "No reply received.";
-  } catch (err) {
-    console.error("AI request failed:", err);
-    return "AI request failed.";
-  }
+// ── AI (re-exported so AIPanel can import from here for circuitry) ─────────────
+export async function askAI(userMessage: string): Promise<string> {
+    try {
+        const res = await fetch('http://www.brodieberger.com/ai_hint', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ game_type: 'circuitry', user_message: userMessage }),
+        });
+        const data = await res.json();
+        return data.reply || 'No reply received.';
+    } catch {
+        return 'AI request failed.';
+    }
 }
