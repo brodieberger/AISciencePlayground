@@ -1,13 +1,50 @@
 <script lang="ts">
-	import { askAI } from '$lib/physics/game.svelte';
+	import { askAI } from '$lib/game-ui.svelte';
 	import { uiState } from '$lib/game-ui.svelte';
+	import {buildPhysicsContext} from '$lib/physics/game.svelte';
+	import {buildChemistryContext} from '$lib/chemistry/game.svelte';
+	import {buildCircuitryContext} from '$lib/circuitry/game.svelte';
+
 
 	async function handleAskAI() {
 		if (!uiState.aiPrompt.trim()) return;
 
-		uiState.aiResponse = await askAI(uiState.aiPrompt);
+		console.log("Context:", JSON.parse(JSON.stringify(uiState.aiContext)));
+
+		uiState.aiResponse = await askAI(
+			uiState.aiPrompt,
+			uiState.aiContext
+		);
+
 		uiState.aiPrompt = '';
 	}
+
+	async function testAI() {
+		const context = getContextForGame();
+
+		console.log("Context:", context);
+
+		const reply = await askAI(uiState.gameType, uiState.aiPrompt, context);
+
+		console.log("Final reply:", reply);
+
+		uiState.aiResponse = reply;
+		uiState.aiPrompt = '';
+	}
+
+	function getContextForGame() {
+    switch (uiState.gameType) {
+        case "physics":
+            return buildPhysicsContext();
+        case "circuitry":
+            return buildCircuitryContext();
+        case "chemistry":
+            return buildChemistryContext();
+        default:
+            return {};
+    }
+}
+
 </script>
 
 <div class="ai-panel">
@@ -18,7 +55,7 @@
 		placeholder="Ask the AI for help..."
 		bind:value={uiState.aiPrompt}
 	/>
-	<button onclick={handleAskAI}>Ask AI</button>
+	<button onclick={testAI}>Ask AI</button>
 	<p class="ai-output">{uiState.aiResponse}</p>
 </div>
 

@@ -222,6 +222,7 @@ let _onGoal: (() => void) | undefined;
 export function startGame(_container: HTMLElement, opts?: { onGoal?: () => void }) {
     _onGoal = opts?.onGoal;
     loadLevel(gameState.currentLevelIndex);
+    updateAIContext();
 }
 
 function loadLevel(index: number) {
@@ -459,24 +460,16 @@ function stubReaction(slots: ReactionSlot[]): CompoundResult {
     };
 }
 
-// AI REQUEST
-export async function askAI(userMessage: string) {
-  const payload = {
-    game_type: "chemistry",
-    user_message: userMessage,
-  };
+import { uiState } from '$lib/game-ui.svelte';
 
-  try {
-    const res = await fetch("http://www.brodieberger.com/ai_hint", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
+function updateAIContext() {
+    uiState.gameType = "chemistry";
+}
 
-    const data = await res.json();
-    return data.reply || "No reply received.";
-  } catch (err) {
-    console.error("AI request failed:", err);
-    return "AI request failed.";
-  }
+export function buildChemistryContext() {
+    return {
+        goal: "not done yet",
+        reaction: "One Oxygen, Two Hydrogen",
+        sandboxMode: false,
+    };
 }
