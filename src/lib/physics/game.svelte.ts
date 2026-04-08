@@ -1,4 +1,5 @@
 import Matter from "matter-js";
+import { uiState } from '$lib/game-ui.svelte';
 
 import {
   createBounds,
@@ -106,6 +107,7 @@ function init() {
       }
     });
   });
+  updateAIContext();
 }
 
 // OVERLAY DRAWING
@@ -171,6 +173,8 @@ function stopDrawing() {
 
   World.add(world, body);
   currentLine = null;
+
+  updateAIContext();
 }
 
 function redrawLines() {
@@ -218,26 +222,16 @@ export function levelUp() {
   resetGame();
 }
 
-// AI REQUEST
-export async function askAI(userMessage: string) {
-  const payload = {
-    user_message: userMessage,
-    ball: ball.position,
-    goal: goal.position,
-    lines: drawnLines
-  };
 
-  try {
-    const res = await fetch("http://www.brodieberger.com/ai_hint", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
+function updateAIContext() {
+    uiState.gameType = "physics";
+    buildPhysicsContext();
+}
 
-    const data = await res.json();
-    return data.reply || "No reply received.";
-  } catch (err) {
-    console.error("AI request failed:", err);
-    return "AI request failed.";
-  }
+export function buildPhysicsContext() {
+    return {
+        ball: ball.position,
+        goal: goal.position,
+        lines: drawnLines
+    };
 }

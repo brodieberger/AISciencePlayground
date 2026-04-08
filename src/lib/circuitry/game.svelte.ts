@@ -1,5 +1,7 @@
 // $lib/circuitry/game.svelte.ts
 
+import { uiState } from '$lib/game-ui.svelte';
+
 export type ComponentType =
     | 'empty'
     | 'wire'
@@ -224,6 +226,7 @@ let _onGoal: (() => void) | undefined;
 export function startGame(_container: HTMLElement, opts?: { onGoal?: () => void }) {
     _onGoal = opts?.onGoal;
     loadLevel(gameState.currentLevelIndex);
+    updateAIContext();
 }
 
 function loadLevel(index: number) {
@@ -310,26 +313,22 @@ function resolve() {
         level?.goal !== 'sandbox';
 
     if (goalMet) _onGoal?.();
+
 }
 
-// AI REQUEST
-export async function askAI(userMessage: string) {
-  const payload = {
-    game_type: "circuitry",
-    user_message: userMessage,
-  };
+function updateAIContext() {
+    uiState.gameType = "circuitry";
+}
 
-  try {
-    const res = await fetch("http://www.brodieberger.com/ai_hint", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
 
-    const data = await res.json();
-    return data.reply || "No reply received.";
-  } catch (err) {
-    console.error("AI request failed:", err);
-    return "AI request failed.";
-  }
+export function buildCircuitryContext() {
+    return {
+        goal: "Complete! Continue to next level.",
+        grid: [],
+        solved: true,
+        shortCircuit: false,
+        openLoop: false,
+        activeLights: 3,
+        totalLights: 3,
+    };
 }
