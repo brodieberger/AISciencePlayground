@@ -1,5 +1,5 @@
 import Matter from "matter-js";
-import type { LevelConfig } from "./level-data";
+import type { LevelConfig, PrefabType } from "./level-data";
 
 const { World, Bodies } = Matter;
 
@@ -18,10 +18,7 @@ export function createBounds(world: Matter.World, w: number, h: number) {
     return bounds;
 }
 
-export function createBallAndCage(
-    world: Matter.World,
-    level: LevelConfig
-) {
+export function createBallAndCage(world: Matter.World, level: LevelConfig) {
     const { x, y } = level.ball;
     const size = 40;
     const thickness = 6;
@@ -53,20 +50,77 @@ function cageStyle() {
         }
     };
 }
-export function createGoal(
-    world: Matter.World,
-    level: LevelConfig
-) {
+
+export function createGoal(world: Matter.World, level: LevelConfig) {
     const { x, y } = level.goal;
-    const goal = Bodies.rectangle(
-        x,
-        y,
-        80,
-        20, {
+    const goal = Bodies.rectangle(x, y, 80, 20, {
         isStatic: true,
         render: { fillStyle: "#00ff88" }
     });
 
     World.add(world, goal);
     return goal;
+}
+
+// --- Prefab factories ---
+
+export function spawnPrefab(
+    world: Matter.World,
+    type: PrefabType,
+    x: number,
+    y: number
+): Matter.Body | Matter.Body[] {
+    switch (type) {
+        case 'bridge':   return spawnBridge(world, x, y);
+        case 'bouncepad': return spawnBouncePad(world, x, y);
+        case 'ramp':     return spawnRamp(world, x, y);
+        case 'bumper':   return spawnBumper(world, x, y);
+    }
+}
+
+// A long flat static platform
+function spawnBridge(world: Matter.World, x: number, y: number): Matter.Body {
+    const body = Bodies.rectangle(x, y, 160, 10, {
+        isStatic: true,
+        label: 'prefab:bridge',
+        render: { fillStyle: '#a0784a', strokeStyle: '#c8a06a', lineWidth: 2 }
+    });
+    World.add(world, body);
+    return body;
+}
+
+// A short platform with very high restitution — launches the ball upward
+function spawnBouncePad(world: Matter.World, x: number, y: number): Matter.Body {
+    const body = Bodies.rectangle(x, y, 80, 14, {
+        isStatic: true,
+        label: 'prefab:bouncepad',
+        restitution: 1,
+        render: { fillStyle: '#ff4488', strokeStyle: '#ff88bb', lineWidth: 2 }
+    });
+    World.add(world, body);
+    return body;
+}
+
+// An angled ramp (30 degrees)
+function spawnRamp(world: Matter.World, x: number, y: number): Matter.Body {
+    const body = Bodies.rectangle(x, y, 140, 10, {
+        isStatic: true,
+        angle: Math.PI / 6,
+        label: 'prefab:ramp',
+        render: { fillStyle: '#ffaa00', strokeStyle: '#ffcc44', lineWidth: 2 }
+    });
+    World.add(world, body);
+    return body;
+}
+
+// A circular bumper that deflects the ball
+function spawnBumper(world: Matter.World, x: number, y: number): Matter.Body {
+    const body = Bodies.circle(x, y, 20, {
+        isStatic: true,
+        label: 'prefab:bumper',
+        restitution: 1.8,
+        render: { fillStyle: '#8844ff', strokeStyle: '#bb88ff', lineWidth: 2 }
+    });
+    World.add(world, body);
+    return body;
 }
