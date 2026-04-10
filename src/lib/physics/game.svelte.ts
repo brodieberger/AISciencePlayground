@@ -1,5 +1,5 @@
 import Matter from "matter-js";
-import { uiState } from '$lib/game-ui.svelte';
+import { uiState, physicsGameState } from '$lib/game-ui.svelte';
 
 import {
   createBounds,
@@ -19,10 +19,6 @@ let runner: Matter.Runner;
 
 let ball: Matter.Body;
 let goal: Matter.Body;
-
-export const gameState = $state({
-  currentLevelIndex: 0
-});
 
 let drawnLines: {
   x1: number;
@@ -89,7 +85,7 @@ function init() {
 
   createBounds(world, w, h);
 
-  let level = levels[gameState.currentLevelIndex];
+  let level = levels[physicsGameState.currentLevelIndex];
   ball = createBallAndCage(world, level);
   goal = createGoal(world, level);
 
@@ -218,7 +214,7 @@ export function resetGame() {
 }
 
 export function levelUp() {
-  gameState.currentLevelIndex++;
+  physicsGameState.currentLevelIndex++;
   resetGame();
 }
 
