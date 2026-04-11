@@ -33,14 +33,15 @@
 </GameShell>
 
 <style>
-	
 .game-container {
-	flex: 1;            
+	flex: 1;
+	min-height: 0;
 	width: 100%;
 	background-color: #0a0f1a;
 	border: 2px solid #333;
 	border-radius: 6px;
 	box-shadow: 0 0 16px #000 inset;
 	position: relative;
+	overflow: hidden;
 }
 </style>

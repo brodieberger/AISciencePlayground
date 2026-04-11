@@ -302,8 +302,17 @@ export function resetGame() {
 }
 
 export function levelUp() {
+    if (physicsGameState.currentLevelIndex < (levels.length-1)){
     physicsGameState.currentLevelIndex++;
     resetGame();
+    }
+}
+
+export function levelDown() {
+  if (physicsGameState.currentLevelIndex > 0){
+    physicsGameState.currentLevelIndex--;
+    resetGame();
+    }
 }
 
 function updateAIContext() {

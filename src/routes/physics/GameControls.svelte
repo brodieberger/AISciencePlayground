@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { levelUp, releaseCage, resetGame } from '$lib/physics/game.svelte';
+	import { levelDown, levelUp, releaseCage, resetGame } from '$lib/physics/game.svelte';
 	import { uiState, physicsGameState } from '$lib/game-ui.svelte';
 	import type { PrefabType } from '$lib/physics/level-data';
 
@@ -9,12 +9,12 @@
 		uiState.aiResponse = '';
 	}
 
-	const prefabLabels: Record<PrefabType, string> = {
+	const prefabLabels = {
 		bridge: '🪵 Bridge',
 		bouncepad: '🟣 Bounce Pad',
 		ramp: '📐 Ramp',
 		bumper: '🔵 Bumper'
-	};
+	} satisfies Record<PrefabType, string>;
 
 	function onDragStart(type: PrefabType) {
 		physicsGameState.activePrefab = type;
@@ -37,8 +37,12 @@
 	<div class="controls">
 		<button onclick={handleReset}>Reset</button>
 		<button onclick={releaseCage}>Release Cage</button>
+		<button onclick={levelDown}>
+			⬅️
+		</button>
+		<p>Current Level: {physicsGameState.currentLevelIndex}</p>
 		<button onclick={levelUp}>
-			Next Level: {physicsGameState.currentLevelIndex + 1}
+			➡️
 		</button>
 	</div>
 
@@ -59,8 +63,8 @@
 							onclick={() => selectPrefab(slot.type)}
 							onkeydown={(e) => e.key === 'Enter' && selectPrefab(slot.type)}
 						>
-							{prefabLabels[slot.type]}
-							<span class="count">×{slot.count}</span>
+							{prefabLabels[slot.type as PrefabType]}
+							<span class="count">x{slot.count}</span>
 						</div>
 					{/if}
 				{/each}
