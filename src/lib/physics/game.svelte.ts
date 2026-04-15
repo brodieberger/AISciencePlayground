@@ -11,7 +11,7 @@ import {
 
 import { levels, type PrefabType } from "./level-data";
 
-const { Engine, World, Render, Runner, Bodies, Events } = Matter;
+const { Engine, World, Render, Runner, Bodies, Events, Body, Query } = Matter;
 
 let engine: Matter.Engine;
 let world: Matter.World;
@@ -30,11 +30,17 @@ let drawnLines: {
 
 let placedPrefabs: { type: PrefabType; body: Matter.Body | Matter.Body[] }[] = [];
 
+// Tracks the physics body for each drawn line so we can rotate it on click
+let drawnLineBodies: Matter.Body[] = [];
+
 let overlayCanvas: HTMLCanvasElement;
 let overlayCtx: CanvasRenderingContext2D;
 
 let drawing = false;
 let currentLine: { x1: number; y1: number; x2: number; y2: number } | null = null;
+
+// Store mousedown position to distinguish a click from a drag
+let mouseDownPos: { x: number; y: number } | null = null;
 
 // Ghost preview position while dragging a prefab over the canvas
 let ghostPos: { x: number; y: number } | null = null;
@@ -133,6 +139,7 @@ function setupOverlay(w: number, h: number) {
     overlayCanvas.addEventListener("mouseup", stopDrawing);
     overlayCanvas.addEventListener("mouseleave", onMouseLeave);
     }
+    overlayCanvas.addEventListener("click", onCanvasClick);
 
     // Prefab drag-and-drop (dragover / drop come from the inventory panel)
     overlayCanvas.addEventListener("dragover", onDragOver);
@@ -142,8 +149,10 @@ function setupOverlay(w: number, h: number) {
 
 // LINE DRAWING
 function startDrawing(e: MouseEvent) {
-    // Don't draw lines while a prefab is selected for placement
-    if (physicsGameState.activePrefab) return;
+    if (physicsGameState.activePrefab || physicsGameState.currentLevelIndex >= levels.length) {
+        return;
+    }
+    mouseDownPos = { x: e.offsetX, y: e.offsetY };
     drawing = true;
     currentLine = { x1: e.offsetX, y1: e.offsetY, x2: e.offsetX, y2: e.offsetY };
 }
@@ -164,12 +173,26 @@ function stopDrawing() {
     if (!drawing || !currentLine) return;
     drawing = false;
 
+    const dx = currentLine.x2 - currentLine.x1;
+    const dy = currentLine.y2 - currentLine.y1;
+    const dist = Math.hypot(dx, dy);
+
+    // Short movement = treat as a click, not a line draw
+    if (dist < 8) {
+        const cx = mouseDownPos!.x;
+        const cy = mouseDownPos!.y;
+        currentLine = null;
+        mouseDownPos = null;
+        tryRotateAt(cx, cy);
+        return;
+    }
+
     drawnLines.push(currentLine);
 
     const midX = (currentLine.x1 + currentLine.x2) / 2;
     const midY = (currentLine.y1 + currentLine.y2) / 2;
-    const len = Math.hypot(currentLine.x2 - currentLine.x1, currentLine.y2 - currentLine.y1);
-    const angle = Math.atan2(currentLine.y2 - currentLine.y1, currentLine.x2 - currentLine.x1);
+    const len = dist;
+    const angle = Math.atan2(dy, dx);
 
     const body = Bodies.rectangle(midX, midY, len, 6, {
         isStatic: true,
@@ -178,12 +201,56 @@ function stopDrawing() {
     });
 
     World.add(world, body);
+    drawnLineBodies.push(body);
     currentLine = null;
+    mouseDownPos = null;
 
     updateAIContext();
 }
 
-// PREFAB DRAG AND DROP
+// CLICK-TO-ROTATE
+// Uses Matter.Query to find bodies at the click point, then rotates 90 degrees.
+// Works for both placed prefabs and drawn line bodies.
+function tryRotateAt(x: number, y: number) {
+    const point = { x, y };
+
+    // Collect all rotatable bodies
+    const rotatableBodies = [
+        ...placedPrefabs.flatMap(p => Array.isArray(p.body) ? p.body : [p.body]),
+        ...drawnLineBodies
+    ];
+
+    const hits = Query.point(rotatableBodies, point);
+    if (hits.length === 0) return;
+
+    // Rotate the topmost hit (last added wins)
+    const target = hits[hits.length - 1];
+    Body.setAngle(target, target.angle + Math.PI / 2);
+
+    // If it was a drawn line, sync the stored line data angle too
+    const lineIdx = drawnLineBodies.indexOf(target);
+    if (lineIdx !== -1) {
+        const line = drawnLines[lineIdx];
+        const midX = target.position.x;
+        const midY = target.position.y;
+        const halfLen = Math.hypot(line.x2 - line.x1, line.y2 - line.y1) / 2;
+        const newAngle = target.angle;
+        drawnLines[lineIdx] = {
+            x1: midX - Math.cos(newAngle) * halfLen,
+            y1: midY - Math.sin(newAngle) * halfLen,
+            x2: midX + Math.cos(newAngle) * halfLen,
+            y2: midY + Math.sin(newAngle) * halfLen,
+        };
+    }
+
+    updateAIContext();
+}
+
+// Handle clicks when a prefab is the active tool (no line drawing in this mode)
+function onCanvasClick(e: MouseEvent) {
+    if (physicsGameState.activePrefab) return; // drops are handled via dragover/drop
+    tryRotateAt(e.offsetX, e.offsetY);
+}
 function onDragOver(e: DragEvent) {
     if (!physicsGameState.activePrefab) return;
     e.preventDefault(); // allow drop
@@ -291,6 +358,7 @@ function resetWorld() {
 
     container.innerHTML = "";
     drawnLines = [];
+    drawnLineBodies = [];
     placedPrefabs = [];
     ghostPos = null;
 
@@ -302,10 +370,10 @@ export function resetGame() {
 }
 
 export function levelUp() {
-    if (physicsGameState.currentLevelIndex < (levels.length-1)){
+if (physicsGameState.currentLevelIndex < (levels.length-1)){
     physicsGameState.currentLevelIndex++;
     resetGame();
-    }
+}
 }
 
 export function levelDown() {

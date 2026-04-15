@@ -40,7 +40,7 @@
 		<button onclick={levelDown}>
 			⬅️
 		</button>
-		<p>Current Level: {physicsGameState.currentLevelIndex}</p>
+		<p>Current Level: {physicsGameState.currentLevelIndex + 1}</p>
 		<button onclick={levelUp}>
 			➡️
 		</button>
@@ -84,6 +84,8 @@
 	display: flex;
 	flex-wrap: wrap;
 	gap: 4px;
+	margin-top: 5px;
+	height: 40px;
 }
 
 button {
@@ -93,6 +95,7 @@ button {
 	font-weight: bold;
 	cursor: pointer;
 	transition: all 0.2s ease;
+	height: 40px;
 }
 
 button:nth-child(1) { background-color: #ff6666; color: #0b1020; }
