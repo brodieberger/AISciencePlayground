@@ -1,0 +1,7 @@
+{
+	"/": [],
+	"/api/ai_hint": [
+		"src/routes/api/ai_hint/+server.ts"
+	],
+	"/physics": []
+}
