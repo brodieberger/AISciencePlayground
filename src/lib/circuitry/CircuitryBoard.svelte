@@ -1,219 +1,231 @@
 <!-- $lib/circuitry/CircuitryBoard.svelte -->
-<!-- Renders inside the game-container div, styled to match the physics panel -->
-
 <script lang="ts">
     import {
         gameState,
-        placeComponent,
-        removeComponent,
+        placeCell,
+        eraseCell,
         toggleSwitch,
         type ComponentType,
-        type Direction,
     } from './game.svelte';
 
-    let { selected = 'wire' }: { selected: ComponentType } = $props();
+    // Selected tool is passed down from +page.svelte via bind:selected
+    let { selected = $bindable<ComponentType>('wire') }: { selected: ComponentType } = $props();
 
-    const ICONS: Record<ComponentType, string> = {
-        empty:    '',
-        wire:     '',
-        battery:  '🔋',
-        switch:   '',
-        light:    '💡',
-        resistor: '',
-    };
+    // ── Click handlers ────────────────────────────────────────────────────────
 
-    const WIRE_CONNECTIONS: Record<string, Direction[]> = {
-        'east-west':   ['east', 'west'],
-        'north-south': ['north', 'south'],
-        'east-south':  ['east', 'south'],
-        'east-north':  ['east', 'north'],
-        'west-south':  ['west', 'south'],
-        'west-north':  ['west', 'north'],
-        'cross':       ['east', 'west', 'north', 'south'],
-    };
-
-    const ORIENT_GLYPHS: Record<string, string> = {
-        'east-west':   '─',
-        'north-south': '│',
-        'east-south':  '└',
-        'east-north':  '┌',
-        'west-south':  '┘',
-        'west-north':  '┐',
-        'cross':       '┼',
-    };
-
-    let wireOrientation = $state('east-west');
-
-    function handleClick(row: number, col: number) {
-        const cell = gameState.grid[row]?.[col];
+    function handleClick(r: number, c: number) {
+        const cell = gameState.grid[r]?.[c];
         if (!cell) return;
 
-        if (cell.component.type === 'switch') {
-            toggleSwitch(row, col);
+        // Always let switch toggle regardless of selected tool
+        if (cell.type === 'switch') {
+            toggleSwitch(r, c);
             return;
         }
-        if (cell.component.fixed) return;
 
         if (selected === 'empty') {
-            removeComponent(row, col);
-        } else if (selected === 'wire') {
-            placeComponent(row, col, 'wire', WIRE_CONNECTIONS[wireOrientation]);
+            eraseCell(r, c);
         } else {
-            placeComponent(row, col, selected);
+            placeCell(r, c, selected);
         }
     }
 
-    function handleRightClick(e: MouseEvent, row: number, col: number) {
+    function handleRightClick(e: MouseEvent, r: number, c: number) {
         e.preventDefault();
-        removeComponent(row, col);
+        eraseCell(r, c);
     }
 
-    function cellClasses(cell: (typeof gameState.grid)[0][0]): string {
-        const t = cell.component.type;
+    // ── Auto-connect: show a trace arm toward every non-empty neighbour ───────
+    // No manual orientation needed — adjacency drives the visual connection.
+
+    function traceDirs(r: number, c: number): string[] {
+        const cell = gameState.grid[r]?.[c];
+        if (!cell || cell.type === 'empty') return [];
+        const dirs: string[] = [];
+        const check: [number, number, string][] = [
+            [r-1, c,   'north'],
+            [r+1, c,   'south'],
+            [r,   c-1, 'west'],
+            [r,   c+1, 'east'],
+        ];
+        for (const [nr, nc, dir] of check) {
+            const n = gameState.grid[nr]?.[nc];
+            if (n && n.type !== 'empty') dirs.push(dir);
+        }
+        return dirs;
+    }
+
+    // ── CSS class builder ─────────────────────────────────────────────────────
+
+    function cellClass(r: number, c: number): string {
+        const cell = gameState.grid[r]?.[c];
+        if (!cell) return 'cell';
         return [
             'cell',
-            t !== 'empty'          ? 'has-component' : '',
-            cell.component.energized ? 'energized'   : '',
-            cell.component.lit       ? 'lit'          : '',
-            cell.component.fixed     ? 'fixed'        : '',
-            t === 'battery'  ? 'battery'  : '',
-            t === 'switch'   ? 'switch'   : '',
-            t === 'light'    ? 'light'    : '',
-            t === 'resistor' ? 'resistor' : '',
+            cell.type !== 'empty' ? `ct-${cell.type}` : '',
+            cell.energized        ? 'energized'        : '',
+            cell.lit              ? 'lit'               : '',
         ].filter(Boolean).join(' ');
     }
 
-    function cellLabel(cell: (typeof gameState.grid)[0][0]): string {
-        const t = cell.component.type;
-        if (t === 'switch') return cell.component.state.open ? '○' : '━';
-        if (t === 'wire')   return '';
-        return ICONS[t] ?? '';
+    // ── Cell label ────────────────────────────────────────────────────────────
+
+    function cellLabel(r: number, c: number): string {
+        const cell = gameState.grid[r]?.[c];
+        if (!cell) return '';
+        switch (cell.type) {
+            case 'battery':  return '🔋';
+            case 'light':    return cell.lit ? '💡' : '○';
+            case 'switch':   return cell.switchClosed ? 'ON' : 'OFF';
+            case 'resistor': return 'R';
+            default:         return '';
+        }
     }
 
-    let cols = $derived(gameState.grid[0]?.length ?? 5);
-    let rows = $derived(gameState.grid.length ?? 5);
+    let rows = $derived(gameState.grid.length);
+    let cols = $derived(gameState.grid[0]?.length ?? 9);
 </script>
 
-<div class="circuit-board" style="--cols: {cols}; --rows: {rows};">
-    {#each gameState.grid as row}
-        {#each row as cell}
+<div class="board" style="--cols:{cols}; --rows:{rows};">
+    {#each gameState.grid as row, r}
+        {#each row as _cell, c}
             <!-- svelte-ignore a11y-no-static-element-interactions -->
             <div
-                class={cellClasses(cell)}
-                onclick={() => handleClick(cell.row, cell.col)}
-                oncontextmenu={(e) => handleRightClick(e, cell.row, cell.col)}
+                class={cellClass(r, c)}
+                onclick={() => handleClick(r, c)}
+                oncontextmenu={(e) => handleRightClick(e, r, c)}
             >
-                {#if cell.component.type !== 'empty'}
-                    <span class="icon">{cellLabel(cell)}</span>
+                {#if gameState.grid[r][c].type !== 'empty'}
+                    <!-- Trace arms toward every non-empty neighbour -->
+                    {#each traceDirs(r, c) as dir}
+                        <span class="trace trace-{dir}"></span>
+                    {/each}
+                    <!-- Centre dot ties traces together -->
+                    <span class="node"></span>
                 {/if}
-                {#each cell.component.connections as dir}
-                    <span class="trace trace-{dir}"></span>
-                {/each}
+
+                <!-- Icon / label -->
+                {#if cellLabel(r, c)}
+                    <span class="lbl">{cellLabel(r, c)}</span>
+                {/if}
+
+                <!-- Glow overlay for lit bulb -->
+                {#if gameState.grid[r][c].type === 'light' && gameState.grid[r][c].lit}
+                    <span class="glow"></span>
+                {/if}
             </div>
         {/each}
     {/each}
 </div>
 
-{#if selected === 'wire'}
-    <div class="orientation-row">
-        {#each Object.entries(ORIENT_GLYPHS) as [key, glyph]}
-            <button
-                class="orient-btn"
-                class:active={wireOrientation === key}
-                onclick={() => (wireOrientation = key)}
-                title={key}
-            >{glyph}</button>
-        {/each}
-    </div>
-{/if}
-
 <style>
-    .circuit-board {
+    /* ── Board ── */
+    .board {
         display: grid;
         grid-template-columns: repeat(var(--cols), 1fr);
-        grid-template-rows: repeat(var(--rows), 1fr);
+        grid-template-rows:    repeat(var(--rows), 1fr);
         gap: 2px;
+        /* Fill parent completely */
         width: 100%;
-        flex: 1;
-        padding: 8px;
+        height: 100%;
+        padding: 6px;
         box-sizing: border-box;
+        background: #090e18;
     }
 
+    /* ── Cell ── */
     .cell {
         position: relative;
-        background: #0d1828;
-        border: 1px solid #1a2a3a;
+        /* aspect-ratio keeps cells square as grid scales */
+        aspect-ratio: 1;
+        min-width: 0;
+        min-height: 0;
+        background: #0b1422;
+        border: 1px solid #182438;
         border-radius: 3px;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: background 0.1s, border-color 0.1s;
         overflow: hidden;
-        min-height: 0;
-        aspect-ratio: 1;
+        transition: border-color .1s, background .1s;
     }
-    .cell:hover:not(.fixed) {
-        background: #152030;
-        border-color: #2a4a6a;
-    }
-    .cell.fixed   { cursor: default; }
-    .cell.energized { background: #081828; border-color: #2a6aaa; }
-    .cell.lit {
-        background: #1e1800;
-        border-color: #ccaa00;
-        box-shadow: 0 0 10px #ccaa0050 inset;
-    }
-    .cell.battery  { background: #0d1f0d; border-color: #2a6a2a; }
-    .cell.switch   { background: #1a0f20; border-color: #6a3a8a; }
+    .cell:hover { border-color: #2a4060; background: #0d1828; }
 
-    .icon {
-        font-size: clamp(0.65rem, 1.8vw, 1.1rem);
-        z-index: 2;
-        pointer-events: none;
-        line-height: 1;
-    }
+    /* Component colour tints */
+    .cell.ct-battery  { background: #091a09; border-color: #1a4020; }
+    .cell.ct-wire     { background: #091420; border-color: #152d48; }
+    .cell.ct-switch   { background: #110920; border-color: #35165a; }
+    .cell.ct-light    { background: #1a1400; border-color: #383000; }
+    .cell.ct-resistor { background: #180d07; border-color: #381e0e; }
 
+    /* ── Energized (battery-connected, green) ── */
+    .cell.energized                { background: #05180b !important; border-color: #00bb55 !important; }
+    .cell.energized .trace         { background: #00ff88 !important; box-shadow: 0 0 5px #00ff88; }
+    .cell.energized .node          { background: #00ff88 !important; box-shadow: 0 0 5px #00ff88; }
+
+    /* ── Lit bulb (gold) ── */
+    .cell.lit                      { background: #1c1400 !important; border-color: #ffcc00 !important; }
+    .cell.lit .trace               { background: #ffcc00 !important; box-shadow: 0 0 5px #ffcc00; }
+    .cell.lit .node                { background: #ffcc00 !important; box-shadow: 0 0 5px #ffcc00; }
+
+    /* ── Traces ── */
     .trace {
         position: absolute;
-        background: #2a5a8a;
+        background: #2a5888;
         pointer-events: none;
         border-radius: 1px;
         z-index: 1;
-        transition: background 0.15s;
+        transition: background .12s, box-shadow .12s;
     }
-    .energized .trace { background: #3a8aee; }
-    .lit .trace        { background: #ddbb00; }
-
-    .trace-east, .trace-west   { height: 25%; width: 50%; top: 37.5%; }
-    .trace-north, .trace-south { width: 25%; height: 50%; left: 37.5%; }
+    /* Horizontal */
+    .trace-east, .trace-west { height: 32%; width: 52%; top: 34%; }
     .trace-east  { right: 0; }
-    .trace-west  { left: 0; }
-    .trace-north { top: 0; }
+    .trace-west  { left:  0; }
+    /* Vertical */
+    .trace-north, .trace-south { width: 32%; height: 52%; left: 34%; }
+    .trace-north { top:    0; }
     .trace-south { bottom: 0; }
 
-    .orientation-row {
-        display: flex;
-        gap: 4px;
-        margin-top: 6px;
-        flex-wrap: wrap;
+    /* ── Centre node ── */
+    .node {
+        position: absolute;
+        width: 32%; height: 32%;
+        border-radius: 50%;
+        background: #2a5888;
+        z-index: 2;
+        pointer-events: none;
+        transition: background .12s, box-shadow .12s;
     }
-    .orient-btn {
-        padding: 4px 10px;
-        background: #111c2b;
-        border: 1px solid #1e3550;
-        border-radius: 4px;
-        color: #7aaccc;
-        cursor: pointer;
-        font-size: 1rem;
+
+    /* ── Label ── */
+    .lbl {
+        position: absolute;
+        z-index: 3;
+        font-size: clamp(0.4rem, 1.3vw, 0.85rem);
+        pointer-events: none;
         line-height: 1;
-        transition: background 0.15s, border-color 0.15s;
+        text-align: center;
+        font-family: 'Share Tech Mono', monospace;
     }
-    .orient-btn:hover  { background: #1a2d42; border-color: #3a6a99; }
-    .orient-btn.active {
-        background: #0a2040;
-        border-color: #3a8aee;
-        color: #e0f0ff;
-        box-shadow: 0 0 6px #3a8aee40;
+    .ct-switch .lbl {
+        font-size: clamp(0.35rem, 0.95vw, 0.65rem);
+        font-weight: 900;
+        color: #ffd700;
     }
+    .ct-switch.energized .lbl { color: #00ff88; }
+    .ct-battery .lbl  { font-size: clamp(0.7rem, 1.8vw, 1.2rem); }
+    .ct-light .lbl    { font-size: clamp(0.7rem, 1.8vw, 1.2rem); }
+
+    /* ── Bulb glow ── */
+    .glow {
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: radial-gradient(circle, rgba(255,215,0,.28) 0%, transparent 70%);
+        pointer-events: none;
+        z-index: 0;
+        animation: gpulse 1s ease-in-out infinite alternate;
+    }
+    @keyframes gpulse { from { opacity:.5; } to { opacity:1; } }
 </style>
