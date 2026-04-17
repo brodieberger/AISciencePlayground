@@ -6,7 +6,7 @@ import json
 app = Flask(__name__)
 CORS(app)
 
-@app.route("ai/hint", methods=["POST"])
+@app.route("/ai_hint", methods=["POST"])
 def ai_hint():
     data = request.get_json()
     
