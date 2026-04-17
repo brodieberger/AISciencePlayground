@@ -70,43 +70,43 @@ export const gameState = $state({
 
 export const ELEMENTS: Element[] = [
     {
-        symbol: 'H',  name: 'Hydrogen',  atomicNumber: 1,  atomicMass: 1.008,
+        symbol: 'H', name: 'Hydrogen', atomicNumber: 1, atomicMass: 1.008,
         valence: 1, reactivity: 4, category: 'nonmetal',
         color: '#4fc3f7',
         description: 'The lightest and most abundant element in the universe.',
     },
     {
-        symbol: 'He', name: 'Helium',    atomicNumber: 2,  atomicMass: 4.003,
+        symbol: 'He', name: 'Helium', atomicNumber: 2, atomicMass: 4.003,
         valence: 0, reactivity: 1, category: 'noble',
         color: '#b2ebf2',
         description: 'Noble gas. Nearly unreactive. Used in balloons and cooling.',
     },
     {
-        symbol: 'Li', name: 'Lithium',   atomicNumber: 3,  atomicMass: 6.941,
+        symbol: 'Li', name: 'Lithium', atomicNumber: 3, atomicMass: 6.941,
         valence: 1, reactivity: 5, category: 'alkali',
         color: '#ef9a9a',
         description: 'Soft alkali metal. Highly reactive with water.',
     },
     {
-        symbol: 'C',  name: 'Carbon',    atomicNumber: 6,  atomicMass: 12.011,
+        symbol: 'C', name: 'Carbon', atomicNumber: 6, atomicMass: 12.011,
         valence: 4, reactivity: 2, category: 'nonmetal',
         color: '#616161',
         description: 'Basis of all organic chemistry. Forms diamond and graphite.',
     },
     {
-        symbol: 'N',  name: 'Nitrogen',  atomicNumber: 7,  atomicMass: 14.007,
+        symbol: 'N', name: 'Nitrogen', atomicNumber: 7, atomicMass: 14.007,
         valence: 3, reactivity: 2, category: 'nonmetal',
         color: '#90caf9',
         description: 'Makes up 78% of Earth\'s atmosphere. Essential for life.',
     },
     {
-        symbol: 'O',  name: 'Oxygen',    atomicNumber: 8,  atomicMass: 15.999,
+        symbol: 'O', name: 'Oxygen', atomicNumber: 8, atomicMass: 15.999,
         valence: 2, reactivity: 3, category: 'nonmetal',
         color: '#ef5350',
         description: 'Essential for respiration and combustion.',
     },
     {
-        symbol: 'Na', name: 'Sodium',    atomicNumber: 11, atomicMass: 22.990,
+        symbol: 'Na', name: 'Sodium', atomicNumber: 11, atomicMass: 22.990,
         valence: 1, reactivity: 5, category: 'alkali',
         color: '#ffcc80',
         description: 'Highly reactive metal. Explodes on contact with water.',
@@ -118,61 +118,61 @@ export const ELEMENTS: Element[] = [
         description: 'Burns with a brilliant white flame.',
     },
     {
-        symbol: 'Cl', name: 'Chlorine',  atomicNumber: 17, atomicMass: 35.453,
+        symbol: 'Cl', name: 'Chlorine', atomicNumber: 17, atomicMass: 35.453,
         valence: 7, reactivity: 4, category: 'halogen',
         color: '#dce775',
         description: 'Toxic yellow-green gas. Used in disinfection.',
     },
     {
-        symbol: 'K',  name: 'Potassium', atomicNumber: 19, atomicMass: 39.098,
+        symbol: 'K', name: 'Potassium', atomicNumber: 19, atomicMass: 39.098,
         valence: 1, reactivity: 5, category: 'alkali',
         color: '#ce93d8',
         description: 'Essential for nerve function. Reacts violently with water.',
     },
     {
-        symbol: 'Ca', name: 'Calcium',   atomicNumber: 20, atomicMass: 40.078,
+        symbol: 'Ca', name: 'Calcium', atomicNumber: 20, atomicMass: 40.078,
         valence: 2, reactivity: 3, category: 'alkaline',
         color: '#fff9c4',
         description: 'Key component of bones and limestone.',
     },
     {
-        symbol: 'Fe', name: 'Iron',      atomicNumber: 26, atomicMass: 55.845,
+        symbol: 'Fe', name: 'Iron', atomicNumber: 26, atomicMass: 55.845,
         valence: 2, reactivity: 2, category: 'transition',
         color: '#bcaaa4',
         description: 'Most common transition metal. Rusts in moist air.',
     },
     {
-        symbol: 'Cu', name: 'Copper',    atomicNumber: 29, atomicMass: 63.546,
+        symbol: 'Cu', name: 'Copper', atomicNumber: 29, atomicMass: 63.546,
         valence: 2, reactivity: 2, category: 'transition',
         color: '#ff8a65',
         description: 'Excellent electrical conductor. Turns green when oxidized.',
     },
     {
-        symbol: 'Zn', name: 'Zinc',      atomicNumber: 30, atomicMass: 65.38,
+        symbol: 'Zn', name: 'Zinc', atomicNumber: 30, atomicMass: 65.38,
         valence: 2, reactivity: 2, category: 'transition',
         color: '#80cbc4',
         description: 'Used in galvanizing steel and in batteries.',
     },
     {
-        symbol: 'Br', name: 'Bromine',   atomicNumber: 35, atomicMass: 79.904,
+        symbol: 'Br', name: 'Bromine', atomicNumber: 35, atomicMass: 79.904,
         valence: 7, reactivity: 4, category: 'halogen',
         color: '#a1887f',
         description: 'One of only two liquid elements at room temperature.',
     },
     {
-        symbol: 'Ag', name: 'Silver',    atomicNumber: 47, atomicMass: 107.868,
+        symbol: 'Ag', name: 'Silver', atomicNumber: 47, atomicMass: 107.868,
         valence: 1, reactivity: 1, category: 'transition',
         color: '#e0e0e0',
         description: 'Best electrical conductor of all elements.',
     },
     {
-        symbol: 'Au', name: 'Gold',      atomicNumber: 79, atomicMass: 196.967,
+        symbol: 'Au', name: 'Gold', atomicNumber: 79, atomicMass: 196.967,
         valence: 1, reactivity: 1, category: 'transition',
         color: '#ffd54f',
         description: 'Noble metal. Highly unreactive. Used in electronics.',
     },
     {
-        symbol: 'Hg', name: 'Mercury',   atomicNumber: 80, atomicMass: 200.592,
+        symbol: 'Hg', name: 'Mercury', atomicNumber: 80, atomicMass: 200.592,
         valence: 2, reactivity: 2, category: 'transition',
         color: '#b0bec5',
         description: 'Only metal liquid at room temperature. Highly toxic.',
@@ -300,7 +300,7 @@ export async function triggerReaction() {
         if (
             level.targetFormula &&
             result.formula.replace(/[₀-₉]/g, s => String('₀₁₂₃₄₅₆₇₈₉'.indexOf(s)))
-                === level.targetFormula.replace(/[₀-₉]/g, s => String('₀₁₂₃₄₅₆₇₈₉'.indexOf(s)))
+            === level.targetFormula.replace(/[₀-₉]/g, s => String('₀₁₂₃₄₅₆₇₈₉'.indexOf(s)))
         ) {
             gameState.goalReached = true;
             _onGoal?.();
@@ -314,27 +314,35 @@ export async function triggerReaction() {
 
 // ── API layer (swap backend URL when ready) ───────────────────────────────────
 
-const API_BASE = '/api';  // replace with your Express server base URL
+const API_BASE = 'http://127.0.0.1:8080';  // replace with your Express server base URL
 
 async function fetchReaction(slots: ReactionSlot[]): Promise<CompoundResult> {
+    const key = slots.map(s => s.element.symbol).sort().join('-');
+    if (STUB_DB[key]) {
+        return { ...STUB_DB[key], fromCache: true };
+    }
+
+    const elementsList = slots.map(s => `${s.quantity} ${s.element.name}`);
     const payload = {
-        elements: slots.map(s => ({ symbol: s.element.symbol, quantity: s.quantity })),
+        game_type: 'chemistry_generation',
+        context: { elements: elementsList }
     };
 
-    // ── STUB: remove this block and uncomment the fetch below when backend is ready ──
-    return stubReaction(slots);
-
     // ── Real backend call (uncomment when ready): ──
-    // const res = await fetch(`${API_BASE}/chemistry/react`, {
-    //     method: 'POST',
-    //     headers: { 'Content-Type': 'application/json' },
-    //     body: JSON.stringify(payload),
-    // });
-    // if (!res.ok) {
-    //     const err = await res.json().catch(() => ({}));
-    //     throw new Error(err.message ?? `Server error ${res.status}`);
-    // }
-    // return res.json() as Promise<CompoundResult>;
+    const res = await fetch(`${API_BASE}/ai_hint`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message ?? `Server error ${res.status}`);
+    }
+    const data = await res.json();
+    return {
+        ...data.reply,
+        fromCache: false
+    } as CompoundResult
 }
 
 // ── Stub reactions for development ───────────────────────────────────────────
@@ -434,31 +442,31 @@ const STUB_DB: Record<string, CompoundResult> = {
     },
 };
 
-function stubReaction(slots: ReactionSlot[]): CompoundResult {
-    const key = slots.map(s => s.element.symbol).sort().join('-');
+// function stubReaction(slots: ReactionSlot[]): CompoundResult {
+//     const key = slots.map(s => s.element.symbol).sort().join('-');
 
-    if (STUB_DB[key]) return { ...STUB_DB[key], fromCache: false };
+//     if (STUB_DB[key]) return { ...STUB_DB[key], fromCache: false };
 
-    // Generic fallback for unknown combinations
-    const symbols = slots.map(s => s.element.symbol).join('');
-    const totalReactivity = slots.reduce((sum, s) => sum + s.element.reactivity, 0);
-    const danger: DangerLevel =
-        totalReactivity >= 8 ? 'extreme' :
-        totalReactivity >= 6 ? 'high' :
-        totalReactivity >= 4 ? 'moderate' : 'low';
+//     // Generic fallback for unknown combinations
+//     const symbols = slots.map(s => s.element.symbol).join('');
+//     const totalReactivity = slots.reduce((sum, s) => sum + s.element.reactivity, 0);
+//     const danger: DangerLevel =
+//         totalReactivity >= 8 ? 'extreme' :
+//         totalReactivity >= 6 ? 'high' :
+//         totalReactivity >= 4 ? 'moderate' : 'low';
 
-    return {
-        formula: symbols + 'ₓ',
-        commonName: 'Unknown Compound',
-        physicalState: 'solid',
-        color: '#90a4ae',
-        dangerLevel: danger,
-        stability: 'unknown',
-        uses: 'Properties unknown. This combination has not been catalogued.',
-        reactionDescription: `Reaction between ${slots.map(s => s.element.name).join(' and ')}. Result uncertain.`,
-        fromCache: false,
-    };
-}
+//     return {
+//         formula: symbols + 'ₓ',
+//         commonName: 'Unknown Compound',
+//         physicalState: 'solid',
+//         color: '#90a4ae',
+//         dangerLevel: danger,
+//         stability: 'unknown',
+//         uses: 'Properties unknown. This combination has not been catalogued.',
+//         reactionDescription: `Reaction between ${slots.map(s => s.element.name).join(' and ')}. Result uncertain.`,
+//         fromCache: false,
+//     };
+// }
 
 import { uiState } from '$lib/game-ui.svelte';
 
