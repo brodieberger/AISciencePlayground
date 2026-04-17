@@ -45,6 +45,7 @@ def ai_hint():
             )
 
             generated_compound = json.loads(response['message']['content'])
+            print(json.dumps(generated_compound, indent=4))
             return jsonify({"reply": generated_compound})
 
         except Exception as e:
