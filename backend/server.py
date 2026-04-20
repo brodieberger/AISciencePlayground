@@ -64,15 +64,25 @@ def ai_hint():
         # except Exception as e:
         #     return jsonify({"error": str(e)}), 500
         
-        # 1. Print exactly what Svelte is sending us to the terminal
+       
         print("\n=== INCOMING SOCRATIC CONTEXT ===")
         print(json.dumps(context, indent=2))
         print("=================================\n")
 
-        # 2. Give Lumi a dedicated System Prompt so it understands Brodie's data
-        system_instruction = "You are Lumi, a helpful AI Lab Assistant. Provide brief, Socratic hints based on the current game context. Do not give the direct answer."
+        # 2. Lumi Prompt
+        system_instruction = """
+        You are Lumi, a friendly and encouraging AI Lab Assistant helping a child learn chemistry.
+        Your goal is to foster scientific inquiry using the Socratic method. Never give the direct answer.
         
-        # 3. Handle empty text boxes gracefully
+        When looking at the Game Data:
+        1. If 'lastResult' is not null, briefly acknowledge what they just created.
+        2. Look at the 'goal'. 
+        3. Ask one simple, guiding question to help them figure out how to bridge the gap between their current elements and the goal.
+        
+        Keep your response under 3 sentences. Be fun, curious, and easy for a middle-schooler to understand.
+        """
+
+        # 3. Handle empty text boxes
         fallback_question = "I am stuck, what should I do?"
         actual_question = user_message if user_message else fallback_question
 
