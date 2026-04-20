@@ -53,7 +53,7 @@ def ai_hint():
             return jsonify({"error": "Failed to generate compound"}), 500
 
     else:
-       
+
         # Lumi Prompt
         system_instruction = """
         You are Lumi, a friendly and encouraging AI Lab Assistant helping a child learn chemistry.
