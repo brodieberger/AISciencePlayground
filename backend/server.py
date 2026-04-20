@@ -53,12 +53,38 @@ def ai_hint():
             return jsonify({"error": "Failed to generate compound"}), 500
 
     else:
-        prompt = f"Game: {game_type}\nContext: {context}\nQuestion: {user_message}" 
+        # prompt = f"Game: {game_type}\nContext: {context}\nQuestion: {user_message}" 
+        
+        # try:
+        #     response = ollama.chat(
+        #         model="phi3",
+        #         messages=[{"role": "user", "content": prompt}]
+        #     )
+        #     return jsonify({"reply": response['message']['content']})
+        # except Exception as e:
+        #     return jsonify({"error": str(e)}), 500
+        
+        # 1. Print exactly what Svelte is sending us to the terminal
+        print("\n=== INCOMING SOCRATIC CONTEXT ===")
+        print(json.dumps(context, indent=2))
+        print("=================================\n")
+
+        # 2. Give Lumi a dedicated System Prompt so it understands Brodie's data
+        system_instruction = "You are Lumi, a helpful AI Lab Assistant. Provide brief, Socratic hints based on the current game context. Do not give the direct answer."
+        
+        # 3. Handle empty text boxes gracefully
+        fallback_question = "I am stuck, what should I do?"
+        actual_question = user_message if user_message else fallback_question
+
+        prompt = f"Game Data:\n{json.dumps(context, indent=2)}\n\nStudent Question: {actual_question}" 
         
         try:
             response = ollama.chat(
                 model="phi3",
-                messages=[{"role": "user", "content": prompt}]
+                messages=[
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": prompt}
+                ]
             )
             return jsonify({"reply": response['message']['content']})
         except Exception as e:
