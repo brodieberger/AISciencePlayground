@@ -53,23 +53,8 @@ def ai_hint():
             return jsonify({"error": "Failed to generate compound"}), 500
 
     else:
-        # prompt = f"Game: {game_type}\nContext: {context}\nQuestion: {user_message}" 
-        
-        # try:
-        #     response = ollama.chat(
-        #         model="phi3",
-        #         messages=[{"role": "user", "content": prompt}]
-        #     )
-        #     return jsonify({"reply": response['message']['content']})
-        # except Exception as e:
-        #     return jsonify({"error": str(e)}), 500
-        
        
-        print("\n=== INCOMING SOCRATIC CONTEXT ===")
-        print(json.dumps(context, indent=2))
-        print("=================================\n")
-
-        # 2. Lumi Prompt
+        # Lumi Prompt
         system_instruction = """
         You are Lumi, a friendly and encouraging AI Lab Assistant helping a child learn chemistry.
         Your goal is to foster scientific inquiry using the Socratic method. Never give the direct answer.
