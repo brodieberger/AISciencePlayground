@@ -80,6 +80,8 @@ def ai_hint():
         3. Ask one simple, guiding question to help them figure out how to bridge the gap between their current elements and the goal.
         
         Keep your response under 3 sentences. Be fun, curious, and easy for a middle-schooler to understand.
+
+        CRITICAL RULE: Output ONLY the exact words Lumi says to the student. Do NOT include any parentheses, meta-commentary, or explanations of why you asked the question.
         """
 
         # 3. Handle empty text boxes
