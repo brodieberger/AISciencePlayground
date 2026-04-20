@@ -1,4 +1,5 @@
 import Matter from "matter-js";
+import { untrack } from 'svelte';
 import { uiState, physicsGameState } from '$lib/game-ui.svelte';
 
 import {
@@ -445,7 +446,7 @@ export function levelDown() {
 }
 
 function updateAIContext() {
-    uiState.aiContext = buildPhysicsContext();
+    untrack(() => { uiState.aiContext = buildPhysicsContext(); });
 }
 
 export function buildPhysicsContext() {
