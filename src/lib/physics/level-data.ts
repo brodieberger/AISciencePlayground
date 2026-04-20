@@ -21,9 +21,9 @@ export const levels: LevelConfig[] = [
     // Level 1
     {
         ball: { x: 100, y: 100 },
-        goal: { x: 500, y: 500 },
+        goal: { x: 500, y: 300 },
         prefabs: [
-            { type: 'bridge', count: 2 },
+            { type: 'ramp', count: 2 },
             { type: 'bouncepad', count: 1 },
         ]
     },

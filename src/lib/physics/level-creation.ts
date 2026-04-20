@@ -89,12 +89,13 @@ function spawnBridge(world: Matter.World, x: number, y: number): Matter.Body {
     return body;
 }
 
-// A short platform with very high restitution — launches the ball upward
+// Bouncepad: launches the ball via applyForce in game.svelte.ts on collision.
 function spawnBouncePad(world: Matter.World, x: number, y: number): Matter.Body {
-    const body = Bodies.rectangle(x, y, 80, 14, {
+    const body = Bodies.rectangle(x, y, 90, 14, {
         isStatic: true,
+        restitution: 0,
+        friction: 0,
         label: 'prefab:bouncepad',
-        restitution: 1,
         render: { fillStyle: '#ff4488', strokeStyle: '#ff88bb', lineWidth: 2 }
     });
     World.add(world, body);

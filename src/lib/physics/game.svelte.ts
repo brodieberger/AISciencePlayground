@@ -11,7 +11,7 @@ import {
 
 import { levels, type PrefabType } from "./level-data";
 
-const { Engine, World, Render, Runner, Bodies, Events, Body, Query } = Matter;
+const { Engine, World, Render, Runner, Bodies, Events, Body, Query, Vector } = Matter;
 
 let engine: Matter.Engine;
 let world: Matter.World;
@@ -102,13 +102,38 @@ function init() {
 
     Events.on(engine, "afterUpdate", redrawLines);
 
+    let bounceCooldown = false;
+
     Events.on(engine, "collisionStart", (event) => {
         event.pairs.forEach(({ bodyA, bodyB }) => {
+            // Goal detection
             if (
                 (bodyA === ball && bodyB === goal) ||
                 (bodyA === goal && bodyB === ball)
             ) {
                 if (onGoalReached) onGoalReached();
+            }
+
+            // Bouncepad: apply a strong upward impulse to the ball
+            const isBouncepad = (b: Matter.Body) => b.label === 'prefab:bouncepad';
+            if (
+                !bounceCooldown &&
+                ((bodyA === ball && isBouncepad(bodyB)) ||
+                 (bodyB === ball && isBouncepad(bodyA)))
+            ) {
+                bounceCooldown = true;
+                setTimeout(() => { bounceCooldown = false; }, 300);
+
+                const pad = isBouncepad(bodyA) ? bodyA : bodyB;
+
+                // Scale launch off incoming speed so faster balls fly higher.
+                // clamp to a minimum so a slow-rolling ball still gets a good kick.
+                const incomingSpeed = Math.hypot(ball.velocity.x, ball.velocity.y);
+                const launchY = -Math.max(12, incomingSpeed * 1.4);
+
+                Body.setVelocity(ball, { x: ball.velocity.x, y: launchY });
+
+                animateBouncePad(pad);
             }
         });
     });
@@ -343,6 +368,44 @@ function drawGhost(type: PrefabType, x: number, y: number) {
     }
 
     overlayCtx.restore();
+}
+
+// BOUNCEPAD ANIMATION
+// Squishes the pad down then springs back using render scale over ~200ms
+function animateBouncePad(pad: Matter.Body) {
+    const SQUISH_FRAMES = 4;
+    const RECOVER_FRAMES = 8;
+    let frame = 0;
+
+    const original = { ...pad.render };
+
+    function tick() {
+        frame++;
+        if (frame <= SQUISH_FRAMES) {
+            // Squish: flatten vertically, widen horizontally
+            const t = frame / SQUISH_FRAMES;
+            pad.render.fillStyle = interpolateColor('#ff4488', '#ffdd00', t);
+        } else if (frame <= SQUISH_FRAMES + RECOVER_FRAMES) {
+            // Recover
+            const t = (frame - SQUISH_FRAMES) / RECOVER_FRAMES;
+            pad.render.fillStyle = interpolateColor('#ffdd00', '#ff4488', t);
+        } else {
+            pad.render.fillStyle = '#ff4488';
+            return; // done
+        }
+        requestAnimationFrame(tick);
+    }
+
+    requestAnimationFrame(tick);
+}
+
+function interpolateColor(from: string, to: string, t: number): string {
+    const f = parseInt(from.slice(1), 16);
+    const e = parseInt(to.slice(1), 16);
+    const r = Math.round(((f >> 16) & 0xff) * (1 - t) + ((e >> 16) & 0xff) * t);
+    const g = Math.round(((f >> 8) & 0xff) * (1 - t) + ((e >> 8) & 0xff) * t);
+    const b = Math.round((f & 0xff) * (1 - t) + (e & 0xff) * t);
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
 // ACTIONS
