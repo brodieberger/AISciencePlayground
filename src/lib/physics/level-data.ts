@@ -1,4 +1,4 @@
-export type PrefabType = 'bridge' | 'bouncepad' | 'ramp' | 'bumper';
+export type PrefabType = 'bridge' | 'bouncepad' | 'ramp' | 'bumper' | 'seesaw';
 
 export interface PrefabConfig {
     type: PrefabType;
@@ -21,9 +21,9 @@ export const levels: LevelConfig[] = [
     // Level 1
     {
         ball: { x: 100, y: 100 },
-        goal: { x: 500, y: 300 },
+        goal: { x: 500, y: 500 },
         prefabs: [
-            { type: 'ramp', count: 2 },
+            { type: 'bridge', count: 2 },
             { type: 'bouncepad', count: 1 },
         ]
     },
@@ -47,6 +47,18 @@ export const levels: LevelConfig[] = [
             { type: 'ramp', count: 1 },
             { type: 'bouncepad', count: 1 },
             { type: 'bumper', count: 1 },
+        ]
+    },
+
+    // Level 4 — Fulcrum
+    // A seesaw sits pre-placed in the level. The caged ball is on one side.
+    // The player must release the cage so the ball drops onto the heavy side,
+    // tipping the seesaw and launching the ball on the other cup toward the goal.
+    {
+        ball: { x: 300, y: 80 },
+        goal: { x: 520, y: 420 },
+        prefabs: [
+            { type: 'seesaw', count: 1 },
         ]
     }
 ];

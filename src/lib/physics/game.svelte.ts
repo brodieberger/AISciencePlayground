@@ -13,6 +13,8 @@ import { levels, type PrefabType } from "./level-data";
 
 const { Engine, World, Render, Runner, Bodies, Events, Body, Query, Vector } = Matter;
 
+const SEESAW_MAX_ANGLE = (40 * Math.PI) / 180;
+
 let engine: Matter.Engine;
 let world: Matter.World;
 let render: Matter.Render;
@@ -29,26 +31,20 @@ let drawnLines: {
 }[] = [];
 
 let placedPrefabs: { type: PrefabType; body: Matter.Body | Matter.Body[] }[] = [];
-
-// Tracks the physics body for each drawn line so we can rotate it on click
 let drawnLineBodies: Matter.Body[] = [];
+let seesawBeams: Matter.Body[] = [];
 
 let overlayCanvas: HTMLCanvasElement;
 let overlayCtx: CanvasRenderingContext2D;
 
 let drawing = false;
 let currentLine: { x1: number; y1: number; x2: number; y2: number } | null = null;
-
-// Store mousedown position to distinguish a click from a drag
 let mouseDownPos: { x: number; y: number } | null = null;
-
-// Ghost preview position while dragging a prefab over the canvas
 let ghostPos: { x: number; y: number } | null = null;
 
 let container: HTMLElement;
 let onGoalReached: (() => void) | null = null;
 
-// ENTRY POINT
 export function startGame(
     targetContainer: HTMLElement,
     options: { onGoal?: () => void } = {}
@@ -58,7 +54,6 @@ export function startGame(
     init();
 }
 
-// INITIALIZATION
 function init() {
     engine = Engine.create();
     engine.gravity.y = 2;
@@ -87,26 +82,27 @@ function init() {
     Runner.run(runner, engine);
 
     setupOverlay(w, h);
-
     createBounds(world, w, h);
 
     const level = levels[physicsGameState.currentLevelIndex];
     ball = createBallAndCage(world, level);
     goal = createGoal(world, level);
 
-    // Initialise inventory from level config
     physicsGameState.inventory = level.prefabs.map(p => ({ ...p }));
     physicsGameState.activePrefab = null;
 
     placedPrefabs = [];
+    seesawBeams = [];
 
-    Events.on(engine, "afterUpdate", redrawLines);
+    Events.on(engine, "afterUpdate", () => {
+        redrawLines();
+        clampSeesaws();
+    });
 
     let bounceCooldown = false;
 
     Events.on(engine, "collisionStart", (event) => {
         event.pairs.forEach(({ bodyA, bodyB }) => {
-            // Goal detection
             if (
                 (bodyA === ball && bodyB === goal) ||
                 (bodyA === goal && bodyB === ball)
@@ -114,7 +110,6 @@ function init() {
                 if (onGoalReached) onGoalReached();
             }
 
-            // Bouncepad: apply a strong upward impulse to the ball
             const isBouncepad = (b: Matter.Body) => b.label === 'prefab:bouncepad';
             if (
                 !bounceCooldown &&
@@ -125,14 +120,9 @@ function init() {
                 setTimeout(() => { bounceCooldown = false; }, 300);
 
                 const pad = isBouncepad(bodyA) ? bodyA : bodyB;
-
-                // Scale launch off incoming speed so faster balls fly higher.
-                // clamp to a minimum so a slow-rolling ball still gets a good kick.
                 const incomingSpeed = Math.hypot(ball.velocity.x, ball.velocity.y);
                 const launchY = -Math.max(12, incomingSpeed * 1.4);
-
                 Body.setVelocity(ball, { x: ball.velocity.x, y: launchY });
-
                 animateBouncePad(pad);
             }
         });
@@ -141,7 +131,19 @@ function init() {
     updateAIContext();
 }
 
-// OVERLAY DRAWING
+// SEESAW ANGLE CLAMP
+function clampSeesaws() {
+    for (const beam of seesawBeams) {
+        if (beam.angle > SEESAW_MAX_ANGLE) {
+            Body.setAngle(beam, SEESAW_MAX_ANGLE);
+            Body.setAngularVelocity(beam, 0);
+        } else if (beam.angle < -SEESAW_MAX_ANGLE) {
+            Body.setAngle(beam, -SEESAW_MAX_ANGLE);
+            Body.setAngularVelocity(beam, 0);
+        }
+    }
+}
+
 function setupOverlay(w: number, h: number) {
     overlayCanvas = document.createElement("canvas");
     overlayCanvas.width = w;
@@ -157,26 +159,20 @@ function setupOverlay(w: number, h: number) {
     if (!ctx) throw new Error("Could not get 2D context");
     overlayCtx = ctx;
 
-    // Line drawing
-    if (physicsGameState.currentLevelIndex == 3){
-    overlayCanvas.addEventListener("mousedown", startDrawing);
-    overlayCanvas.addEventListener("mousemove", onMouseMove);
-    overlayCanvas.addEventListener("mouseup", stopDrawing);
-    overlayCanvas.addEventListener("mouseleave", onMouseLeave);
+    if (physicsGameState.currentLevelIndex == 3) {
+        overlayCanvas.addEventListener("mousedown", startDrawing);
+        overlayCanvas.addEventListener("mousemove", onMouseMove);
+        overlayCanvas.addEventListener("mouseup", stopDrawing);
+        overlayCanvas.addEventListener("mouseleave", onMouseLeave);
     }
     overlayCanvas.addEventListener("click", onCanvasClick);
-
-    // Prefab drag-and-drop (dragover / drop come from the inventory panel)
     overlayCanvas.addEventListener("dragover", onDragOver);
     overlayCanvas.addEventListener("drop", onDrop);
     overlayCanvas.addEventListener("dragleave", onDragLeave);
 }
 
-// LINE DRAWING
 function startDrawing(e: MouseEvent) {
-    if (physicsGameState.activePrefab || physicsGameState.currentLevelIndex >= levels.length) {
-        return;
-    }
+    if (physicsGameState.activePrefab || physicsGameState.currentLevelIndex >= levels.length) return;
     mouseDownPos = { x: e.offsetX, y: e.offsetY };
     drawing = true;
     currentLine = { x1: e.offsetX, y1: e.offsetY, x2: e.offsetX, y2: e.offsetY };
@@ -202,7 +198,6 @@ function stopDrawing() {
     const dy = currentLine.y2 - currentLine.y1;
     const dist = Math.hypot(dx, dy);
 
-    // Short movement = treat as a click, not a line draw
     if (dist < 8) {
         const cx = mouseDownPos!.x;
         const cy = mouseDownPos!.y;
@@ -233,26 +228,23 @@ function stopDrawing() {
     updateAIContext();
 }
 
-// CLICK-TO-ROTATE
-// Uses Matter.Query to find bodies at the click point, then rotates 90 degrees.
-// Works for both placed prefabs and drawn line bodies.
+// Seesaw beams are excluded from rotation — they rotate via physics only.
 function tryRotateAt(x: number, y: number) {
     const point = { x, y };
 
-    // Collect all rotatable bodies
     const rotatableBodies = [
-        ...placedPrefabs.flatMap(p => Array.isArray(p.body) ? p.body : [p.body]),
+        ...placedPrefabs
+            .flatMap(p => Array.isArray(p.body) ? p.body : [p.body])
+            .filter(b => b.label !== 'prefab:seesaw:beam' && b.label !== 'prefab:seesaw:cup'),
         ...drawnLineBodies
     ];
 
     const hits = Query.point(rotatableBodies, point);
     if (hits.length === 0) return;
 
-    // Rotate the topmost hit (last added wins)
     const target = hits[hits.length - 1];
     Body.setAngle(target, target.angle + Math.PI / 2);
 
-    // If it was a drawn line, sync the stored line data angle too
     const lineIdx = drawnLineBodies.indexOf(target);
     if (lineIdx !== -1) {
         const line = drawnLines[lineIdx];
@@ -271,14 +263,14 @@ function tryRotateAt(x: number, y: number) {
     updateAIContext();
 }
 
-// Handle clicks when a prefab is the active tool (no line drawing in this mode)
 function onCanvasClick(e: MouseEvent) {
-    if (physicsGameState.activePrefab) return; // drops are handled via dragover/drop
+    if (physicsGameState.activePrefab) return;
     tryRotateAt(e.offsetX, e.offsetY);
 }
+
 function onDragOver(e: DragEvent) {
     if (!physicsGameState.activePrefab) return;
-    e.preventDefault(); // allow drop
+    e.preventDefault();
     const rect = overlayCanvas.getBoundingClientRect();
     ghostPos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
 }
@@ -298,7 +290,6 @@ function onDrop(e: DragEvent) {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    // Consume one from inventory
     const slot = physicsGameState.inventory.find(i => i.type === type);
     if (!slot || slot.count <= 0) return;
     slot.count--;
@@ -306,7 +297,11 @@ function onDrop(e: DragEvent) {
     const body = spawnPrefab(world, type, x, y);
     placedPrefabs.push({ type, body });
 
-    // Deselect if inventory exhausted
+    // Register seesaw beam (index 0) for angle clamping
+    if (type === 'seesaw' && Array.isArray(body)) {
+        seesawBeams.push(body[0]);
+    }
+
     if (slot.count === 0) {
         physicsGameState.activePrefab = null;
     }
@@ -314,11 +309,9 @@ function onDrop(e: DragEvent) {
     updateAIContext();
 }
 
-// OVERLAY RENDER
 function redrawLines() {
     overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
-    // Drawn lines
     overlayCtx.strokeStyle = "#66ccff";
     overlayCtx.lineWidth = 4;
     overlayCtx.shadowColor = "#66ccff";
@@ -334,7 +327,6 @@ function redrawLines() {
 
     overlayCtx.shadowBlur = 0;
 
-    // Ghost prefab preview
     if (ghostPos && physicsGameState.activePrefab) {
         drawGhost(physicsGameState.activePrefab, ghostPos.x, ghostPos.y);
     }
@@ -365,33 +357,40 @@ function drawGhost(type: PrefabType, x: number, y: number) {
             overlayCtx.arc(0, 0, 20, 0, Math.PI * 2);
             overlayCtx.fill();
             break;
+        case 'seesaw':
+            // Triangle base
+            overlayCtx.fillStyle = '#889966';
+            overlayCtx.beginPath();
+            overlayCtx.moveTo(0, 36);
+            overlayCtx.lineTo(-12, 0);
+            overlayCtx.lineTo(12, 0);
+            overlayCtx.closePath();
+            overlayCtx.fill();
+            // Beam
+            overlayCtx.fillStyle = '#c8a06a';
+            overlayCtx.fillRect(-110, -6, 220, 12);
+            break;
     }
 
     overlayCtx.restore();
 }
 
-// BOUNCEPAD ANIMATION
-// Squishes the pad down then springs back using render scale over ~200ms
 function animateBouncePad(pad: Matter.Body) {
     const SQUISH_FRAMES = 4;
     const RECOVER_FRAMES = 8;
     let frame = 0;
 
-    const original = { ...pad.render };
-
     function tick() {
         frame++;
         if (frame <= SQUISH_FRAMES) {
-            // Squish: flatten vertically, widen horizontally
             const t = frame / SQUISH_FRAMES;
             pad.render.fillStyle = interpolateColor('#ff4488', '#ffdd00', t);
         } else if (frame <= SQUISH_FRAMES + RECOVER_FRAMES) {
-            // Recover
             const t = (frame - SQUISH_FRAMES) / RECOVER_FRAMES;
             pad.render.fillStyle = interpolateColor('#ffdd00', '#ff4488', t);
         } else {
             pad.render.fillStyle = '#ff4488';
-            return; // done
+            return;
         }
         requestAnimationFrame(tick);
     }
@@ -408,7 +407,6 @@ function interpolateColor(from: string, to: string, t: number): string {
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
-// ACTIONS
 export function releaseCage() {
     cageWalls.forEach((wall) => World.remove(world, wall));
 }
@@ -423,6 +421,7 @@ function resetWorld() {
     drawnLines = [];
     drawnLineBodies = [];
     placedPrefabs = [];
+    seesawBeams = [];
     ghostPos = null;
 
     init();
@@ -433,16 +432,16 @@ export function resetGame() {
 }
 
 export function levelUp() {
-if (physicsGameState.currentLevelIndex < (levels.length-1)){
-    physicsGameState.currentLevelIndex++;
-    resetGame();
-}
+    if (physicsGameState.currentLevelIndex < (levels.length - 1)) {
+        physicsGameState.currentLevelIndex++;
+        resetGame();
+    }
 }
 
 export function levelDown() {
-  if (physicsGameState.currentLevelIndex > 0){
-    physicsGameState.currentLevelIndex--;
-    resetGame();
+    if (physicsGameState.currentLevelIndex > 0) {
+        physicsGameState.currentLevelIndex--;
+        resetGame();
     }
 }
 
