@@ -474,11 +474,19 @@ function updateAIContext() {
     uiState.gameType = "chemistry";
 }
 
-// TODO REPLACE WITH REAL GAME LOGIC
 export function buildChemistryContext() {
+    const level = levels[gameState.currentLevelIndex];
     return {
-        goal: "not done yet",
-        reaction: "One Oxygen, Two Hydrogen",
-        sandboxMode: false,
+        level: level.name,
+        goal: level.targetFormula ?? 'sandbox',
+        sandboxMode: level.sandboxMode,
+        selectedElements: gameState.selectedSlots.map(s => ({
+            symbol: s.element.symbol,
+            quantity: s.quantity,
+        })),
+        lastResult: gameState.lastResult
+            ? { formula: gameState.lastResult.formula, name: gameState.lastResult.commonName }
+            : null,
+        goalReached: gameState.goalReached
     };
 }
