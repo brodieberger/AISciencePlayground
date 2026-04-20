@@ -458,6 +458,7 @@ export function buildPhysicsContext() {
             position: Array.isArray(p.body)
                 ? (p.body[0] as Matter.Body).position
                 : (p.body as Matter.Body).position
-        }))
+        })),
+        inventory: physicsGameState.inventory.map(i => ({ type: i.type, remaining: i.count })),
     };
 }
