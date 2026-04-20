@@ -5,21 +5,7 @@
 	import {buildChemistryContext} from '$lib/chemistry/game.svelte';
 	import {buildCircuitryContext} from '$lib/circuitry/game.svelte';
 
-
 	async function handleAskAI() {
-		if (!uiState.aiPrompt.trim()) return;
-
-		console.log("Context:", JSON.parse(JSON.stringify(uiState.aiContext)));
-
-		uiState.aiResponse = await askAI(
-			uiState.aiPrompt,
-			uiState.aiContext
-		);
-
-		uiState.aiPrompt = '';
-	}
-
-	async function testAI() {
 		const context = getContextForGame();
 
 		console.log("Context:", context);
@@ -55,7 +41,7 @@
 		placeholder="Ask the AI for help..."
 		bind:value={uiState.aiPrompt}
 	/>
-	<button onclick={testAI}>Ask AI</button>
+	<button onclick={handleAskAI}>Ask AI</button>
 	<p class="ai-output">{uiState.aiResponse}</p>
 </div>
 

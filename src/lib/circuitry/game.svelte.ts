@@ -1,6 +1,7 @@
 // $lib/circuitry/game.svelte.ts
-
 import { uiState } from '$lib/game-ui.svelte';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 export type ComponentType =
     | 'empty'
@@ -10,325 +11,285 @@ export type ComponentType =
     | 'light'
     | 'resistor';
 
-export type Direction = 'north' | 'east' | 'south' | 'west';
-
-export interface CellComponent {
-    type: ComponentType;
-    connections: Direction[];
-    state: Record<string, unknown>;
-    energized: boolean;
-    lit?: boolean;
-    fixed?: boolean;
-}
-
-export interface GridCell {
-    row: number;
-    col: number;
-    component: CellComponent;
+export interface Cell {
+    type:         ComponentType;
+    switchClosed: boolean;   // switch only: true = closed = conducts
+    energized:    boolean;   // set by solver
+    lit:          boolean;   // light only: set by solver
 }
 
 export interface CircuitLevel {
-    id: string;
-    name: string;
+    id:          string;
+    name:        string;
     description: string;
-    goal: string;
-    gridRows: number;
-    gridCols: number;
-    fixedCells: { row: number; col: number; component: CellComponent }[];
-    availableComponents: ComponentType[];
+    rows:        number;
+    cols:        number;
+    available:   ComponentType[];
 }
-
-// ── Reactive game state (mirrors gameState in $lib/physics/game.svelte) ───────
-
-export const gameState = $state({
-    currentLevelIndex: 0,
-    grid: [] as GridCell[][],
-    solved: false,
-    shortCircuit: false,
-    openLoop: true,
-    hint: '',
-    activeLights: 0,
-    totalLights: 0,
-    sandboxMode: false,
-});
 
 // ── Levels ────────────────────────────────────────────────────────────────────
 
 export const levels: CircuitLevel[] = [
     {
-        id: 'level_1',
-        name: 'Light the Bulb',
-        description: 'Select Wire from inventory, then click cells to connect the battery to the bulb.',
-        goal: 'light_bulbs',
-        gridRows: 5,
-        gridCols: 7,
-        fixedCells: [],
-        availableComponents: ['battery', 'wire', 'light', 'empty'],
+        id:          'level_1',
+        name:        'Light the Bulb',
+        description: 'Place a Battery and a Bulb, then connect them with Wires to complete the loop.',
+        rows: 6, cols: 9,
+        available: ['battery', 'wire', 'light', 'empty'],
     },
     {
-        id: 'level_2',
-        name: 'Switch Control',
-        description: 'Place a switch in the wire path, then click it to toggle the light.',
-        goal: 'light_bulbs',
-        gridRows: 5,
-        gridCols: 7,
-        fixedCells: [],
-        availableComponents: ['battery', 'wire', 'switch', 'light', 'empty'],
+        id:          'level_2',
+        name:        'Switch Control',
+        description: 'Add a Switch to the path. Click the switch to toggle the bulb on and off.',
+        rows: 6, cols: 9,
+        available: ['battery', 'wire', 'switch', 'light', 'empty'],
     },
     {
-        id: 'level_3',
-        name: 'Two Bulbs',
-        description: 'Light both bulbs. You can place multiple lights and branch the circuit.',
-        goal: 'light_bulbs',
-        gridRows: 7,
-        gridCols: 7,
-        fixedCells: [],
-        availableComponents: ['battery', 'wire', 'switch', 'light', 'resistor', 'empty'],
+        id:          'level_3',
+        name:        'Two Bulbs',
+        description: 'Light both bulbs. Branch the circuit to power multiple lights.',
+        rows: 8, cols: 9,
+        available: ['battery', 'wire', 'switch', 'light', 'resistor', 'empty'],
     },
 ];
 
-// ── Grid helpers ──────────────────────────────────────────────────────────────
+// ── Grid factory ──────────────────────────────────────────────────────────────
 
-function createEmptyGrid(rows: number, cols: number): GridCell[][] {
-    return Array.from({ length: rows }, (_, r) =>
-        Array.from({ length: cols }, (_, c) => ({
-            row: r,
-            col: c,
-            component: { type: 'empty' as ComponentType, connections: [], state: {}, energized: false },
+function emptyGrid(rows: number, cols: number): Cell[][] {
+    return Array.from({ length: rows }, () =>
+        Array.from({ length: cols }, (): Cell => ({
+            type: 'empty', switchClosed: false, energized: false, lit: false,
         }))
     );
 }
 
-function applyFixedCells(grid: GridCell[][], fixed: CircuitLevel['fixedCells']): GridCell[][] {
-    for (const { row, col, component } of fixed) {
-        grid[row][col].component = { ...component };
-    }
-    return grid;
+// ── Reactive state ────────────────────────────────────────────────────────────
+
+export const gameState = $state({
+    levelIndex:   0,
+    grid:         emptyGrid(levels[0].rows, levels[0].cols),
+    solved:       false,
+    shortCircuit: false,
+    hint:         levels[0].description,
+    activeLights: 0,
+    totalLights:  0,
+    sandboxMode:  false,
+});
+
+// ── Adjacency helpers ─────────────────────────────────────────────────────────
+
+const DIRS: [number, number][] = [[-1,0],[1,0],[0,-1],[0,1]];
+
+function inBounds(grid: Cell[][], r: number, c: number): boolean {
+    return r >= 0 && r < grid.length && c >= 0 && c < (grid[0]?.length ?? 0);
 }
 
-const OPPOSITE: Record<Direction, Direction> = {
-    north: 'south', south: 'north', east: 'west', west: 'east',
-};
+// A cell conducts if it is non-empty AND (not a switch OR switch is closed)
+function conducts(cell: Cell): boolean {
+    if (cell.type === 'empty') return false;
+    if (cell.type === 'switch') return cell.switchClosed;
+    return true;
+}
 
-const DIR_DELTA: Record<Direction, [number, number]> = {
-    north: [-1, 0], south: [1, 0], east: [0, 1], west: [0, -1],
-};
+// ── BFS Circuit Solver ────────────────────────────────────────────────────────
+//
+// Two adjacent non-empty cells that both conduct are automatically connected —
+// no manual direction/connection setting needed. This fixes all wiring issues.
+//
+// A valid circuit = a closed loop that starts AND ends at the same battery cell,
+// passing through at least one load (light/resistor) unless sandboxMode is on.
+// Only cells on a confirmed closed loop are energised — never on open paths.
 
-// ── Circuit solver ────────────────────────────────────────────────────────────
+function solveCircuit(): void {
+    const grid     = gameState.grid;
+    const sandbox  = gameState.sandboxMode;
+    const rows     = grid.length;
+    const cols     = grid[0]?.length ?? 0;
 
-function solveCircuit(grid: GridCell[][], sandbox: boolean) {
-    const rows = grid.length;
-    const cols = grid[0]?.length ?? 0;
+    // Reset all powered state
+    for (const row of grid)
+        for (const cell of row) { cell.energized = false; cell.lit = false; }
 
-    for (const row of grid) {
-        for (const cell of row) {
-            cell.component.energized = false;
-            if (cell.component.type === 'light') cell.component.lit = false;
-        }
-    }
-
-    let solved = false;
+    let solved       = false;
     let shortCircuit = false;
-    let openLoop = true;
-    let hint = '';
-    let activeLights = 0;
-    let totalLights = 0;
+    let hint         = '';
 
-    const batteries = grid.flat().filter(c => c.component.type === 'battery');
+    // Find batteries
+    const batteries: [number,number][] = [];
+    for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++)
+            if (grid[r][c].type === 'battery') batteries.push([r,c]);
 
     if (batteries.length === 0) {
-        return { solved, shortCircuit, openLoop, hint: 'No battery found.', activeLights, totalLights };
+        _commit(false, false, 'Place a Battery to power the circuit.');
+        return;
     }
 
-    for (const battery of batteries) {
-        const posDir = battery.component.connections[0] as Direction | undefined;
-        if (!posDir) continue;
+    outerBat:
+    for (const [br, bc] of batteries) {
 
-        const sr = battery.row + DIR_DELTA[posDir][0];
-        const sc = battery.col + DIR_DELTA[posDir][1];
-        if (sr < 0 || sr >= rows || sc < 0 || sc >= cols) continue;
+        // BFS from every conducting neighbour of the battery.
+        // We look for a path that returns to the battery → closed loop.
+        type Node = { r: number; c: number; path: [number,number][]; hasLoad: boolean };
 
-        const startCell = grid[sr][sc];
-        if (!startCell.component.connections.includes(OPPOSITE[posDir])) continue;
+        const visited = new Set<string>([`${br},${bc}`]);
+        const queue: Node[] = [];
 
-        type Node = { cell: GridCell; path: GridCell[]; hasLoad: boolean };
-        const visited = new Set<string>([`${battery.row},${battery.col}`]);
-        const queue: Node[] = [{ cell: startCell, path: [battery, startCell], hasLoad: false }];
+        for (const [dr, dc] of DIRS) {
+            const nr = br+dr, nc = bc+dc;
+            if (!inBounds(grid, nr, nc)) continue;
+            if (!conducts(grid[nr][nc]))  continue;
+            const k = `${nr},${nc}`;
+            if (visited.has(k))           continue;
+            visited.add(k);
+            const isLoad = grid[nr][nc].type === 'light' || grid[nr][nc].type === 'resistor';
+            queue.push({ r: nr, c: nc, path: [[nr,nc]], hasLoad: isLoad });
+        }
 
-        outer: while (queue.length > 0) {
-            const { cell, path, hasLoad } = queue.shift()!;
-            const key = `${cell.row},${cell.col}`;
-            if (visited.has(key)) continue;
-            visited.add(key);
+        while (queue.length > 0) {
+            const { r, c, path, hasLoad } = queue.shift()!;
 
-            if (cell.component.type === 'switch' && cell.component.state.open === true) {
-                hint = hint || 'A switch is open — click it to close the circuit.';
-                continue;
-            }
+            for (const [dr, dc] of DIRS) {
+                const nr = r+dr, nc = c+dc;
 
-            const isLoad = cell.component.type === 'light' || cell.component.type === 'resistor';
-            const newHasLoad = hasLoad || isLoad;
-
-            for (const dir of cell.component.connections as Direction[]) {
-                const nr = cell.row + DIR_DELTA[dir][0];
-                const nc = cell.col + DIR_DELTA[dir][1];
-                if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
-                const neighbor = grid[nr][nc];
-                if (!neighbor.component.connections.includes(OPPOSITE[dir])) continue;
-
-                if (neighbor.row === battery.row && neighbor.col === battery.col) {
-                    if (!newHasLoad && !sandbox) {
+                // Loop back to battery → closed loop found!
+                if (nr === br && nc === bc) {
+                    if (!hasLoad && !sandbox) {
                         shortCircuit = true;
-                        hint = 'Short circuit! Add a load (light or resistor) between the terminals.';
-                        break outer;
+                        hint = 'Short circuit! Add a Bulb or Resistor to the loop.';
+                        break outerBat;
                     }
-                    for (const c of path) {
-                        c.component.energized = true;
-                        if (c.component.type === 'light') c.component.lit = true;
-                    }
-                    openLoop = false;
+                    // Energise everything on this path
                     solved = true;
-                    break outer;
+                    grid[br][bc].energized = true;
+                    for (const [pr, pc] of path) {
+                        grid[pr][pc].energized = true;
+                        if (grid[pr][pc].type === 'light') grid[pr][pc].lit = true;
+                    }
+                    break outerBat;
                 }
 
-                if (!visited.has(`${neighbor.row},${neighbor.col}`)) {
-                    queue.push({ cell: neighbor, path: [...path, neighbor], hasLoad: newHasLoad });
-                }
+                if (!inBounds(grid, nr, nc))         continue;
+                const nk = `${nr},${nc}`;
+                if (visited.has(nk))                  continue;
+                if (!conducts(grid[nr][nc]))           continue;
+
+                visited.add(nk);
+                const isLoad = grid[nr][nc].type === 'light' || grid[nr][nc].type === 'resistor';
+                queue.push({ r: nr, c: nc, path: [...path, [nr,nc]], hasLoad: hasLoad || isLoad });
             }
         }
     }
 
-    for (const row of grid) {
-        for (const cell of row) {
-            if (cell.component.type === 'light') {
-                totalLights++;
-                if (cell.component.lit) activeLights++;
-            }
+    // Build hint
+    if (!solved && !shortCircuit) {
+        const hasSwitch = gameState.grid.flat().some(c => c.type === 'switch');
+        const hasOpenSwitch = gameState.grid.flat().some(c => c.type === 'switch' && !c.switchClosed);
+        if (hasSwitch && hasOpenSwitch) {
+            hint = 'A switch is open — click it to close the circuit.';
+        } else {
+            hint = 'Circuit is open. Connect components into a closed loop.';
         }
     }
-
-    if (openLoop && !shortCircuit && !hint) {
-        hint = 'Circuit is open. Connect all components to complete the loop.';
-    }
-    if (solved && !shortCircuit) {
-        hint = activeLights === totalLights
-            ? '✓ Circuit complete! All bulbs are lit.'
-            : '✓ Circuit complete!';
+    if (solved) {
+        const al = grid.flat().filter(c => c.type === 'light' && c.lit).length;
+        const tl = grid.flat().filter(c => c.type === 'light').length;
+        hint = tl > 0 ? `✓ Circuit complete! All bulbs are lit.` : '✓ Circuit complete!';
     }
 
-    return { solved, shortCircuit, openLoop, hint, activeLights, totalLights };
+    _commit(solved, shortCircuit, hint);
 }
 
-// ── Public API (mirrors $lib/physics/game.svelte) ─────────────────────────────
+function _commit(solved: boolean, sc: boolean, hint: string): void {
+    const flat = gameState.grid.flat();
+    gameState.solved       = solved;
+    gameState.shortCircuit = sc;
+    gameState.hint         = hint;
+    gameState.activeLights = flat.filter(c => c.type === 'light' && c.lit).length;
+    gameState.totalLights  = flat.filter(c => c.type === 'light').length;
 
-let _onGoal: (() => void) | undefined;
-
-export function startGame(_container: HTMLElement, opts?: { onGoal?: () => void }) {
-    _onGoal = opts?.onGoal;
-    loadLevel(gameState.currentLevelIndex);
-    updateAIContext();
+    // Win condition: all lights on
+    if (solved && !sc && gameState.activeLights > 0 &&
+        gameState.activeLights === gameState.totalLights) {
+        uiState.goalReached = true;
+    }
 }
 
-function loadLevel(index: number) {
-    const level = levels[index];
-    if (!level) return;
-    const grid = applyFixedCells(createEmptyGrid(level.gridRows, level.gridCols), level.fixedCells);
-    gameState.grid = grid;
-    gameState.solved = false;
+// ── Public actions ────────────────────────────────────────────────────────────
+
+export function placeCell(r: number, c: number, type: ComponentType): void {
+    const cell = gameState.grid[r]?.[c];
+    if (!cell) return;
+    cell.type         = type;
+    cell.switchClosed = false;
+    cell.energized    = false;
+    cell.lit          = false;
+    solveCircuit();
+}
+
+export function eraseCell(r: number, c: number): void {
+    placeCell(r, c, 'empty');
+}
+
+export function toggleSwitch(r: number, c: number): void {
+    const cell = gameState.grid[r]?.[c];
+    if (!cell || cell.type !== 'switch') return;
+    cell.switchClosed = !cell.switchClosed;
+    solveCircuit();
+}
+
+export function resetLevel(): void {
+    const lvl = levels[gameState.levelIndex];
+    gameState.grid         = emptyGrid(lvl.rows, lvl.cols);
+    gameState.solved       = false;
     gameState.shortCircuit = false;
-    gameState.openLoop = true;
-    gameState.hint = level.description;
+    gameState.hint         = lvl.description;
     gameState.activeLights = 0;
-    gameState.totalLights = grid.flat().filter(c => c.component.type === 'light').length;
+    gameState.totalLights  = 0;
+    uiState.goalReached    = false;
+    uiState.aiResponse     = '';
 }
 
-export function resetGame() {
-    loadLevel(gameState.currentLevelIndex);
+export function nextLevel(): void {
+    gameState.levelIndex = (gameState.levelIndex + 1) % levels.length;
+    resetLevel();
 }
 
-export function levelUp() {
-    const next = (gameState.currentLevelIndex + 1) % levels.length;
-    gameState.currentLevelIndex = next;
-    loadLevel(next);
-}
-
-export function toggleSandbox() {
+export function toggleSandbox(): void {
     gameState.sandboxMode = !gameState.sandboxMode;
-    resolve();
+    solveCircuit();
 }
 
-const DEFAULT_CONNECTIONS: Record<ComponentType, Direction[]> = {
-    battery:  ['east', 'west'],
-    wire:     ['east', 'west'],
-    switch:   ['east', 'west'],
-    light:    ['east', 'west'],
-    resistor: ['east', 'west'],
-    empty:    [],
-};
-
-export function placeComponent(
-    row: number,
-    col: number,
-    type: ComponentType,
-    connections?: Direction[]
-) {
-    const cell = gameState.grid[row]?.[col];
-    if (!cell || cell.component.fixed) return;
-    const conns = connections ?? DEFAULT_CONNECTIONS[type] ?? ['east', 'west'];
-    cell.component = {
-        type,
-        connections: conns,
-        state: type === 'switch' ? { open: false } : {},
-        energized: false,
-        ...(type === 'light' ? { lit: false } : {}),
-    };
-    resolve();
+// Legacy shims so existing imports don't break
+export function startGame(_el: HTMLElement, opts?: { onGoal?: () => void }): void {
+    uiState.gameType = 'circuitry';
+    resetLevel();
 }
+export function resetGame(): void  { resetLevel(); }
+export function levelUp():   void  { nextLevel();  }
 
-export function removeComponent(row: number, col: number) {
-    placeComponent(row, col, 'empty', []);
+// ── AI ────────────────────────────────────────────────────────────────────────
+
+export async function askAI(userMessage: string): Promise<string> {
+    try {
+        const res = await fetch('http://www.brodieberger.com/ai_hint', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ game_type: 'circuitry', user_message: userMessage }),
+        });
+        const data = await res.json();
+        return data.reply || 'No reply received.';
+    } catch {
+        return 'AI request failed.';
+    }
 }
-
-export function toggleSwitch(row: number, col: number) {
-    const cell = gameState.grid[row]?.[col];
-    if (!cell || cell.component.type !== 'switch') return;
-    cell.component.state = { ...cell.component.state, open: !cell.component.state.open };
-    resolve();
-}
-
-function resolve() {
-    const result = solveCircuit(gameState.grid, gameState.sandboxMode);
-    gameState.solved      = result.solved;
-    gameState.shortCircuit = result.shortCircuit;
-    gameState.openLoop    = result.openLoop;
-    gameState.hint        = result.hint;
-    gameState.activeLights = result.activeLights;
-    gameState.totalLights  = result.totalLights;
-
-    const level = levels[gameState.currentLevelIndex];
-    const goalMet =
-        !result.shortCircuit &&
-        result.activeLights > 0 &&
-        result.activeLights === result.totalLights &&
-        level?.goal !== 'sandbox';
-
-    if (goalMet) _onGoal?.();
-
-}
-
-function updateAIContext() {
-    uiState.gameType = "circuitry";
-}
-
 
 export function buildCircuitryContext() {
     return {
-        goal: "Complete! Continue to next level.",
-        grid: [],
-        solved: true,
-        shortCircuit: false,
-        openLoop: false,
-        activeLights: 3,
-        totalLights: 3,
+        goal:         gameState.solved ? 'Complete!' : gameState.hint,
+        solved:       gameState.solved,
+        shortCircuit: gameState.shortCircuit,
+        activeLights: gameState.activeLights,
+        totalLights:  gameState.totalLights,
     };
 }

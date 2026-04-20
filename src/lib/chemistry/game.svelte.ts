@@ -466,6 +466,7 @@ function updateAIContext() {
     uiState.gameType = "chemistry";
 }
 
+// TODO REPLACE WITH REAL GAME LOGIC
 export function buildChemistryContext() {
     return {
         goal: "not done yet",
