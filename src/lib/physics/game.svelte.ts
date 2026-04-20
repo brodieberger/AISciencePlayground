@@ -11,7 +11,7 @@ import {
 
 import { levels, type PrefabType } from "./level-data";
 
-const { Engine, World, Render, Runner, Bodies, Events, Body, Query, Vector } = Matter;
+const { Engine, World, Render, Runner, Bodies, Events, Body, Query } = Matter;
 
 const SEESAW_MAX_ANGLE = (40 * Math.PI) / 180;
 
@@ -61,7 +61,6 @@ function init() {
 
     const w = container.clientWidth;
     const h = container.clientHeight;
-    console.log("Size:", w, h);
 
     render = Render.create({
         element: container,
@@ -159,7 +158,7 @@ function setupOverlay(w: number, h: number) {
     if (!ctx) throw new Error("Could not get 2D context");
     overlayCtx = ctx;
 
-    if (physicsGameState.currentLevelIndex == 3) {
+    if (physicsGameState.currentLevelIndex === 3) {
         overlayCanvas.addEventListener("mousedown", startDrawing);
         overlayCanvas.addEventListener("mousemove", onMouseMove);
         overlayCanvas.addEventListener("mouseup", stopDrawing);

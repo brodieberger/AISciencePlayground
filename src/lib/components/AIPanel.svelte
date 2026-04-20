@@ -8,11 +8,7 @@
 	async function handleAskAI() {
 		const context = getContextForGame();
 
-		console.log("Context:", context);
-
 		const reply = await askAI(uiState.gameType, uiState.aiPrompt, context);
-
-		console.log("Final reply:", reply);
 
 		uiState.aiResponse = reply;
 		uiState.aiPrompt = '';
@@ -34,7 +30,7 @@
 </script>
 
 <div class="ai-panel">
-<img src="/scientists.jpg" alt="AI Panel Image" class="ai-image" />
+<img src="/scientists.jpg" alt="AI tutor scientists" class="ai-image" />
 
 	<input
 		type="text"

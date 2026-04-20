@@ -272,11 +272,12 @@ export function levelUp():   void  { nextLevel();  }
 
 export async function askAI(userMessage: string): Promise<string> {
     try {
-        const res = await fetch('http://www.brodieberger.com/ai_hint', {
+        const res = await fetch('https://www.brodieberger.com/ai_hint', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({ game_type: 'circuitry', user_message: userMessage }),
         });
+        if (!res.ok) throw new Error(`Server error ${res.status}`);
         const data = await res.json();
         return data.reply || 'No reply received.';
     } catch {
