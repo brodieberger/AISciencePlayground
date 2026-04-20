@@ -3,7 +3,7 @@ export const uiState = $state({
 	aiPrompt: '',
 	aiResponse: '',
 	gameType: 'physics',
-    aiContext: {} as Record<string, unknown>,
+	aiContext: {} as Record<string, unknown>,
 });
 
 export const physicsGameState = $state({
@@ -21,7 +21,7 @@ export async function askAI(gameType: string, userPrompt: string, context: any) 
 
 	console.log('PAYLOAD:', payload);
 
-	const res = await fetch('https://www.brodieberger.com/ai_hint', {
+	const res = await fetch('http://127.0.0.1:8080/ai_hint', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(payload)
