@@ -1,5 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import { browser } from '$app/environment';
+    import { uiState } from '$lib/game-ui.svelte';
 
     // Particle config — mirrors the floating gas particles in the chemistry game
     interface Particle {
@@ -15,6 +17,11 @@
     let raf: number;
 
     onMount(() => {
+        if (browser) {
+            const saved = localStorage.getItem('aiMode');
+            if (saved === 'online' || saved === 'local') uiState.aiMode = saved;
+        }
+
         const ctx = canvas.getContext('2d')!;
 
         function resize() {
@@ -60,6 +67,11 @@
             window.removeEventListener('resize', resize);
         };
     });
+
+    function toggleAIMode() {
+        uiState.aiMode = uiState.aiMode === 'online' ? 'local' : 'online';
+        if (browser) localStorage.setItem('aiMode', uiState.aiMode);
+    }
 
     const modes = [
         {
@@ -140,6 +152,21 @@
                 </a>
             {/each}
         </nav>
+
+        <!-- AI mode toggle -->
+        <div class="ai-toggle" aria-label="AI mode selector">
+            <span class="toggle-label" class:active={uiState.aiMode === 'online'}>Online AI</span>
+            <button
+                class="toggle-track"
+                class:local={uiState.aiMode === 'local'}
+                onclick={toggleAIMode}
+                aria-pressed={uiState.aiMode === 'local'}
+                title={uiState.aiMode === 'online' ? 'Switch to local Ollama AI' : 'Switch to online AI'}
+            >
+                <span class="toggle-thumb"></span>
+            </button>
+            <span class="toggle-label" class:active={uiState.aiMode === 'local'}>Local AI</span>
+        </div>
 
         <footer class="footer">
             <span class="footer-dot"></span>
@@ -388,6 +415,52 @@
         width: 3px; height: 3px;
         border-radius: 50%;
         background: #2a4a5a;
+    }
+
+    /* ── AI mode toggle ── */
+    .ai-toggle {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+        animation: fade-up 0.5s 0.95s ease both;
+    }
+    .toggle-label {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.65rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #2a4a5a;
+        transition: color 0.2s;
+    }
+    .toggle-label.active { color: #66ccff; }
+    .toggle-track {
+        position: relative;
+        width: 40px;
+        height: 20px;
+        border-radius: 10px;
+        background: #1a2a3a;
+        border: 1px solid #2a4a5a;
+        cursor: pointer;
+        padding: 0;
+        transition: border-color 0.2s, background 0.2s;
+    }
+    .toggle-track:hover { border-color: #66ccff; }
+    .toggle-track.local { background: #0d2030; border-color: #66ccff; }
+    .toggle-thumb {
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #2a4a5a;
+        transition: transform 0.2s, background 0.2s;
+    }
+    .toggle-track.local .toggle-thumb {
+        transform: translateX(20px);
+        background: #66ccff;
+        box-shadow: 0 0 6px #66ccff;
     }
 
     /* ── Shared animation ── */

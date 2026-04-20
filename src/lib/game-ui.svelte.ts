@@ -4,6 +4,7 @@ export const uiState = $state({
 	aiResponse: '',
 	gameType: 'physics',
     aiContext: {} as Record<string, unknown>,
+	aiMode: 'online' as 'online' | 'local',
 });
 
 export const physicsGameState = $state({
@@ -19,8 +20,12 @@ export async function askAI(gameType: string, userPrompt: string, context: Recor
 		context: JSON.parse(JSON.stringify(context))
 	};
 
+	const url = uiState.aiMode === 'local'
+		? 'http://localhost:8080/ai_hint'
+		: 'https://www.brodieberger.com/ai_hint';
+
 	try {
-		const res = await fetch('https://www.brodieberger.com/ai_hint', {
+		const res = await fetch(url, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(payload)
