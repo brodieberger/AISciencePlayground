@@ -55,20 +55,16 @@ def ai_hint():
     else:
 
         # Lumi Prompt
-        system_instruction = """
-        You are Lumi, a friendly and encouraging AI Lab Assistant helping a child learn chemistry.
-        Your goal is to foster scientific inquiry using the Socratic method. Never give the direct answer.
-        
-        When looking at the Game Data:
-        1. If 'lastResult' is not null, briefly acknowledge what they just created.
-        2. Look at the 'goal'. 
-        3. Ask one simple, guiding question to help them figure out how to bridge the gap between their current elements and the goal.
-        
-        Keep your response under 3 sentences. Be fun, curious, and easy for a middle-schooler to understand.
-
-        CRITICAL RULE: Output ONLY the exact words Lumi says to the student. Do NOT include any parentheses, meta-commentary, or explanations of why you asked the question.
-        """
-
+        system_instruction = (
+        "You are an expert chemistry engine for an educational sandbox. "
+            "Generate a compound using EXACTLY the element quantities provided — do not adjust or normalize the ratios. "
+            "For example, if given 1 H and 1 O, the formula is HO, not H\u2082O. "
+            "If given 2 H and 1 O, then the formula is H\u2082O. "
+            "Respond with ONLY a raw JSON object — no markdown, no code fences, no extra text. "
+            "Required keys: formula (unicode subscripts e.g. H\u2082O), commonName, "
+            "physicalState (solid/liquid/gas/plasma/unknown), color (hex e.g. #ffd54f), "
+            "dangerLevel (safe/low/moderate/high/extreme), stability, uses, reactionDescription.\n\n"
+            f"Elements to combine (use these exact quantities): {elements}" )
         # 3. Handle empty text boxes
         fallback_question = "I am stuck, what should I do?"
         actual_question = user_message if user_message else fallback_question
