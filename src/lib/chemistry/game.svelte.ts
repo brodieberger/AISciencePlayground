@@ -283,8 +283,9 @@ export function clearReaction() {
 }
 
 export async function triggerReaction() {
-    if (gameState.selectedSlots.length < 2) {
-        gameState.error = 'Add at least 2 elements to attempt a reaction.';
+    const totalAtoms = gameState.selectedSlots.reduce((sum, s) => sum + s.quantity, 0);
+    if (totalAtoms < 2) {
+        gameState.error = 'Add at least 2 atoms to attempt a reaction.';
         return;
     }
 
@@ -317,6 +318,36 @@ export async function triggerReaction() {
 // Keys encode both symbol and quantity: `SYMBOL:QTY` parts sorted alphabetically.
 // e.g. 2×H + 1×O → 'H:2-O:1'   |   1×H + 1×O → 'H:1-O:1' (goes to AI)
 const KNOWN_REACTIONS: Record<string, CompoundResult> = {
+    // ── Diatomic molecules ────────────────────────────────────────────────────
+    'H:2': {
+        formula: 'H₂', commonName: 'Hydrogen Gas', physicalState: 'gas',
+        color: '#e3f2fd', dangerLevel: 'moderate', stability: 'stable',
+        uses: 'Rocket fuel, fuel cells, industrial hydrogen production.',
+        reactionDescription: 'Two hydrogen atoms share electrons in a covalent bond, forming a stable diatomic molecule.',
+        fromCache: true,
+    },
+    'O:2': {
+        formula: 'O₂', commonName: 'Oxygen Gas', physicalState: 'gas',
+        color: '#e8f5e9', dangerLevel: 'low', stability: 'stable',
+        uses: 'Respiration, combustion, medical oxygen therapy.',
+        reactionDescription: 'Two oxygen atoms form a double covalent bond, making the oxygen we breathe.',
+        fromCache: true,
+    },
+    'N:2': {
+        formula: 'N₂', commonName: 'Nitrogen Gas', physicalState: 'gas',
+        color: '#e0f7fa', dangerLevel: 'safe', stability: 'stable',
+        uses: 'Makes up 78% of air. Used in food packaging and industrial processes.',
+        reactionDescription: 'Two nitrogen atoms form an exceptionally strong triple bond.',
+        fromCache: true,
+    },
+    'Cl:2': {
+        formula: 'Cl₂', commonName: 'Chlorine Gas', physicalState: 'gas',
+        color: '#f9fbe7', dangerLevel: 'high', stability: 'stable',
+        uses: 'Water disinfection, PVC production, bleaching agents.',
+        reactionDescription: 'Two chlorine atoms share a pair of electrons in a single covalent bond.',
+        fromCache: true,
+    },
+    // ── Binary compounds ──────────────────────────────────────────────────────
     'H:2-O:1': {
         formula: 'H₂O', commonName: 'Water', physicalState: 'liquid',
         color: '#64b5f6', dangerLevel: 'safe', stability: 'stable',

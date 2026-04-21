@@ -68,7 +68,7 @@
         <div class="stage-controls">
             <button
                 class="react-btn"
-                disabled={gameState.selectedSlots.length < 2 || gameState.reacting}
+                disabled={gameState.selectedSlots.reduce((n, s) => n + s.quantity, 0) < 2 || gameState.reacting}
                 onclick={triggerReaction}
             >
                 {#if gameState.reacting}
@@ -145,6 +145,8 @@
                                     width: {3 + Math.random() * 5}px;
                                     height: {3 + Math.random() * 5}px;
                                     opacity: {0.4 + Math.random() * 0.5};
+                                    --rand: {Math.random()};
+                                    --rand2: {Math.random()};
                                 "
                             ></div>
                         {/each}
