@@ -47,7 +47,7 @@ export const levels: CircuitLevel[] = [
     {
         id:          'level_3',
         name:        'Two Bulbs',
-        description: 'Light both bulbs. Branch the circuit to power multiple lights.',
+        description: 'Light both bulbs. You can wire them in series or build parallel branches.',
         rows: 8, cols: 9,
         available: ['battery', 'wire', 'switch', 'light', 'resistor', 'empty'],
     },
@@ -76,7 +76,7 @@ export const gameState = $state({
     sandboxMode:  false,
 });
 
-// ── Adjacency helpers ─────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 const DIRS: [number, number][] = [[-1,0],[1,0],[0,-1],[0,1]];
 
@@ -86,118 +86,152 @@ function inBounds(grid: Cell[][], r: number, c: number): boolean {
 
 // A cell conducts if it is non-empty AND (not a switch OR switch is closed)
 function conducts(cell: Cell): boolean {
-    if (cell.type === 'empty') return false;
+    if (cell.type === 'empty')  return false;
     if (cell.type === 'switch') return cell.switchClosed;
     return true;
 }
 
-// ── BFS Circuit Solver ────────────────────────────────────────────────────────
+function openCircuitHint(grid: Cell[][]): string {
+    return grid.flat().some(c => c.type === 'switch' && !c.switchClosed)
+        ? 'A switch is open — click it to close the circuit.'
+        : 'Circuit is open. Connect components into a closed loop.';
+}
+
+// ── Circuit Solver ────────────────────────────────────────────────────────────
 //
-// Two adjacent non-empty cells that both conduct are automatically connected —
-// no manual direction/connection setting needed. This fixes all wiring issues.
+// Phase 1 — 2-core decomposition (dead-end elimination):
+//   Iteratively remove any conducting cell whose degree in the conducting graph
+//   is less than 2.  What remains is the "2-core": every surviving cell lies on
+//   at least one simple cycle.  Wires on open arms never carry real current.
 //
-// A valid circuit = a closed loop that starts AND ends at the same battery cell,
-// passing through at least one load (light/resistor) unless sandboxMode is on.
-// Only cells on a confirmed closed loop are energised — never on open paths.
+// Phase 2 — BFS within the 2-core from each battery:
+//   All cells reachable from a battery through cycle cells are energised.
+//   If any load (light / resistor) is reachable the circuit is valid;
+//   if not it is a short.  Multiple batteries are each processed independently
+//   so parallel and series topologies all work correctly.
 
 function solveCircuit(): void {
-    const grid     = gameState.grid;
-    const sandbox  = gameState.sandboxMode;
-    const rows     = grid.length;
-    const cols     = grid[0]?.length ?? 0;
+    const grid    = gameState.grid;
+    const sandbox = gameState.sandboxMode;
+    const rows    = grid.length;
+    const cols    = grid[0]?.length ?? 0;
 
-    // Reset all powered state
+    // Reset powered state
     for (const row of grid)
         for (const cell of row) { cell.energized = false; cell.lit = false; }
 
-    let solved       = false;
-    let shortCircuit = false;
-    let hint         = '';
+    // ── Phase 1: compute degree in the conducting graph ───────────────────────
+    const deg     = Array.from({length: rows}, () => new Array<number>(cols).fill(0));
+    const removed = Array.from({length: rows}, () => new Array<boolean>(cols).fill(false));
 
-    // Find batteries
-    const batteries: [number,number][] = [];
+    for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++) {
+            if (!conducts(grid[r][c])) continue;
+            for (const [dr, dc] of DIRS) {
+                const nr = r+dr, nc = c+dc;
+                if (inBounds(grid, nr, nc) && conducts(grid[nr][nc])) deg[r][c]++;
+            }
+        }
+
+    // Iteratively strip dead ends; survivors all lie on cycles
+    const deadQ: [number, number][] = [];
     for (let r = 0; r < rows; r++)
         for (let c = 0; c < cols; c++)
-            if (grid[r][c].type === 'battery') batteries.push([r,c]);
+            if (conducts(grid[r][c]) && deg[r][c] < 2) deadQ.push([r, c]);
 
-    if (batteries.length === 0) {
+    let dHead = 0;
+    while (dHead < deadQ.length) {
+        const [r, c] = deadQ[dHead++];
+        if (removed[r][c] || !conducts(grid[r][c]) || deg[r][c] >= 2) continue;
+        removed[r][c] = true;
+        for (const [dr, dc] of DIRS) {
+            const nr = r+dr, nc = c+dc;
+            if (!inBounds(grid, nr, nc) || removed[nr][nc] || !conducts(grid[nr][nc])) continue;
+            if (--deg[nr][nc] < 2) deadQ.push([nr, nc]);
+        }
+    }
+
+    // ── Phase 2: classify batteries, early-out if none in a cycle ────────────
+    let hasBattery  = false;
+    let cycleHasBat = false;
+
+    for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++)
+            if (grid[r][c].type === 'battery') {
+                hasBattery = true;
+                if (!removed[r][c]) cycleHasBat = true;
+            }
+
+    if (!hasBattery) {
         _commit(false, false, 'Place a Battery to power the circuit.');
         return;
     }
+    if (!cycleHasBat) {
+        _commit(false, false, openCircuitHint(grid));
+        return;
+    }
 
-    outerBat:
-    for (const [br, bc] of batteries) {
+    // ── Phase 2: BFS per battery through cycle cells ──────────────────────────
+    let anySolved = false;
+    let anyShort  = false;
+    // Track batteries already covered by a previous BFS to avoid duplicate work
+    const coveredBats = new Set<string>();
 
-        // BFS from every conducting neighbour of the battery.
-        // We look for a path that returns to the battery → closed loop.
-        type Node = { r: number; c: number; path: [number,number][]; hasLoad: boolean };
+    for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++) {
+            if (grid[r][c].type !== 'battery' || removed[r][c]) continue;
+            const startKey = `${r},${c}`;
+            if (coveredBats.has(startKey)) continue;
 
-        const visited = new Set<string>([`${br},${bc}`]);
-        const queue: Node[] = [];
+            const visited   = new Set<string>([startKey]);
+            const q: [number, number][] = [[r, c]];
+            const component: [number, number][] = [[r, c]];
+            let hasLoad = false;
+            let qi = 0;
 
-        for (const [dr, dc] of DIRS) {
-            const nr = br+dr, nc = bc+dc;
-            if (!inBounds(grid, nr, nc)) continue;
-            if (!conducts(grid[nr][nc]))  continue;
-            const k = `${nr},${nc}`;
-            if (visited.has(k))           continue;
-            visited.add(k);
-            const isLoad = grid[nr][nc].type === 'light' || grid[nr][nc].type === 'resistor';
-            queue.push({ r: nr, c: nc, path: [[nr,nc]], hasLoad: isLoad });
-        }
-
-        while (queue.length > 0) {
-            const { r, c, path, hasLoad } = queue.shift()!;
-
-            for (const [dr, dc] of DIRS) {
-                const nr = r+dr, nc = c+dc;
-
-                // Loop back to battery → closed loop found!
-                if (nr === br && nc === bc) {
-                    if (!hasLoad && !sandbox) {
-                        shortCircuit = true;
-                        hint = 'Short circuit! Add a Bulb or Resistor to the loop.';
-                        break outerBat;
-                    }
-                    // Energise everything on this path
-                    solved = true;
-                    grid[br][bc].energized = true;
-                    for (const [pr, pc] of path) {
-                        grid[pr][pc].energized = true;
-                        if (grid[pr][pc].type === 'light') grid[pr][pc].lit = true;
-                    }
-                    break outerBat;
+            while (qi < q.length) {
+                const [cr, cc] = q[qi++];
+                for (const [dr, dc] of DIRS) {
+                    const nr = cr+dr, nc = cc+dc;
+                    if (!inBounds(grid, nr, nc) || removed[nr][nc]) continue;
+                    if (!conducts(grid[nr][nc])) continue;
+                    const k = `${nr},${nc}`;
+                    if (visited.has(k)) continue;
+                    visited.add(k);
+                    component.push([nr, nc]);
+                    const t = grid[nr][nc].type;
+                    if (t === 'light' || t === 'resistor') hasLoad = true;
+                    // Mark co-located batteries so we don't double-process same component
+                    if (t === 'battery') coveredBats.add(k);
+                    q.push([nr, nc]);
                 }
+            }
+            coveredBats.add(startKey);
 
-                if (!inBounds(grid, nr, nc))         continue;
-                const nk = `${nr},${nc}`;
-                if (visited.has(nk))                  continue;
-                if (!conducts(grid[nr][nc]))           continue;
-
-                visited.add(nk);
-                const isLoad = grid[nr][nc].type === 'light' || grid[nr][nc].type === 'resistor';
-                queue.push({ r: nr, c: nc, path: [...path, [nr,nc]], hasLoad: hasLoad || isLoad });
+            if (!hasLoad && !sandbox) {
+                anyShort = true;
+            } else {
+                anySolved = true;
+                for (const [er, ec] of component) {
+                    grid[er][ec].energized = true;
+                    if (grid[er][ec].type === 'light') grid[er][ec].lit = true;
+                }
             }
         }
-    }
 
-    // Build hint
-    if (!solved && !shortCircuit) {
-        const hasSwitch = gameState.grid.flat().some(c => c.type === 'switch');
-        const hasOpenSwitch = gameState.grid.flat().some(c => c.type === 'switch' && !c.switchClosed);
-        if (hasSwitch && hasOpenSwitch) {
-            hint = 'A switch is open — click it to close the circuit.';
-        } else {
-            hint = 'Circuit is open. Connect components into a closed loop.';
-        }
-    }
-    if (solved) {
+    // ── Build hint ────────────────────────────────────────────────────────────
+    let hint: string;
+    if (anyShort && !anySolved) {
+        hint = 'Short circuit! Add a Bulb or Resistor to the loop.';
+    } else if (anySolved) {
         const al = grid.flat().filter(c => c.type === 'light' && c.lit).length;
         const tl = grid.flat().filter(c => c.type === 'light').length;
-        hint = tl > 0 ? `✓ Circuit complete! All bulbs are lit.` : '✓ Circuit complete!';
+        hint = tl > 0 ? `✓ Circuit complete! ${al}/${tl} bulbs lit.` : '✓ Circuit complete!';
+    } else {
+        hint = openCircuitHint(grid);
     }
 
-    _commit(solved, shortCircuit, hint);
+    _commit(anySolved, anyShort && !anySolved, hint);
 }
 
 function _commit(solved: boolean, sc: boolean, hint: string): void {
@@ -208,7 +242,6 @@ function _commit(solved: boolean, sc: boolean, hint: string): void {
     gameState.activeLights = flat.filter(c => c.type === 'light' && c.lit).length;
     gameState.totalLights  = flat.filter(c => c.type === 'light').length;
 
-    // Win condition: all lights on
     if (solved && !sc && gameState.activeLights > 0 &&
         gameState.activeLights === gameState.totalLights) {
         uiState.goalReached = true;
@@ -261,12 +294,12 @@ export function toggleSandbox(): void {
 }
 
 // Legacy shims so existing imports don't break
-export function startGame(_el: HTMLElement, opts?: { onGoal?: () => void }): void {
+export function startGame(_el: HTMLElement, _opts?: { onGoal?: () => void }): void {
     uiState.gameType = 'circuitry';
     resetLevel();
 }
-export function resetGame(): void  { resetLevel(); }
-export function levelUp():   void  { nextLevel();  }
+export function resetGame(): void { resetLevel(); }
+export function levelUp():   void { nextLevel();  }
 
 // ── AI ────────────────────────────────────────────────────────────────────────
 

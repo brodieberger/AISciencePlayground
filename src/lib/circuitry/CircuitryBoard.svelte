@@ -8,7 +8,6 @@
         type ComponentType,
     } from './game.svelte';
 
-    // Selected tool is passed down from +page.svelte via bind:selected
     let { selected = $bindable<ComponentType>('wire') }: { selected: ComponentType } = $props();
 
     // ── Click handlers ────────────────────────────────────────────────────────
@@ -16,18 +15,9 @@
     function handleClick(r: number, c: number) {
         const cell = gameState.grid[r]?.[c];
         if (!cell) return;
-
-        // Always let switch toggle regardless of selected tool
-        if (cell.type === 'switch') {
-            toggleSwitch(r, c);
-            return;
-        }
-
-        if (selected === 'empty') {
-            eraseCell(r, c);
-        } else {
-            placeCell(r, c, selected);
-        }
+        if (cell.type === 'switch') { toggleSwitch(r, c); return; }
+        if (selected === 'empty') eraseCell(r, c);
+        else placeCell(r, c, selected);
     }
 
     function handleRightClick(e: MouseEvent, r: number, c: number) {
@@ -35,27 +25,34 @@
         eraseCell(r, c);
     }
 
-    // ── Auto-connect: show a trace arm toward every non-empty neighbour ───────
-    // No manual orientation needed — adjacency drives the visual connection.
+    // ── Trace helpers ─────────────────────────────────────────────────────────
+    // A trace is "live" only when both ends are energised, "lit" when both are lit.
+    // This ensures dead-end arms (connected but not in a loop) stay dim.
 
-    function traceDirs(r: number, c: number): string[] {
+    type TraceInfo = { dir: string; live: boolean; lit: boolean };
+
+    function traceDirs(r: number, c: number): TraceInfo[] {
         const cell = gameState.grid[r]?.[c];
         if (!cell || cell.type === 'empty') return [];
-        const dirs: string[] = [];
-        const check: [number, number, string][] = [
-            [r-1, c,   'north'],
-            [r+1, c,   'south'],
-            [r,   c-1, 'west'],
-            [r,   c+1, 'east'],
+        const result: TraceInfo[] = [];
+        const dirs: [number, number, string][] = [
+            [r-1, c, 'north'], [r+1, c, 'south'],
+            [r,   c-1, 'west'],  [r,   c+1, 'east'],
         ];
-        for (const [nr, nc, dir] of check) {
+        for (const [nr, nc, dir] of dirs) {
             const n = gameState.grid[nr]?.[nc];
-            if (n && n.type !== 'empty') dirs.push(dir);
+            if (n && n.type !== 'empty') {
+                result.push({
+                    dir,
+                    live: cell.energized && n.energized,
+                    lit:  cell.lit && n.lit,
+                });
+            }
         }
-        return dirs;
+        return result;
     }
 
-    // ── CSS class builder ─────────────────────────────────────────────────────
+    // ── Cell helpers ──────────────────────────────────────────────────────────
 
     function cellClass(r: number, c: number): string {
         const cell = gameState.grid[r]?.[c];
@@ -68,14 +65,12 @@
         ].filter(Boolean).join(' ');
     }
 
-    // ── Cell label ────────────────────────────────────────────────────────────
-
     function cellLabel(r: number, c: number): string {
         const cell = gameState.grid[r]?.[c];
         if (!cell) return '';
         switch (cell.type) {
             case 'battery':  return '🔋';
-            case 'light':    return cell.lit ? '💡' : '○';
+            case 'light':    return gameState.grid[r][c].lit ? '💡' : '○';
             case 'switch':   return cell.switchClosed ? 'ON' : 'OFF';
             case 'resistor': return 'R';
             default:         return '';
@@ -89,27 +84,34 @@
 <div class="board" style="--cols:{cols}; --rows:{rows};">
     {#each gameState.grid as row, r}
         {#each row as _cell, c}
-            <!-- svelte-ignore a11y-no-static-element-interactions -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
                 class={cellClass(r, c)}
+                role="button"
+                tabindex="0"
                 onclick={() => handleClick(r, c)}
+                onkeydown={(e) => e.key === 'Enter' && handleClick(r, c)}
                 oncontextmenu={(e) => handleRightClick(e, r, c)}
             >
                 {#if gameState.grid[r][c].type !== 'empty'}
-                    <!-- Trace arms toward every non-empty neighbour -->
-                    {#each traceDirs(r, c) as dir}
-                        <span class="trace trace-{dir}"></span>
+                    {#each traceDirs(r, c) as trace}
+                        <span
+                            class="trace trace-{trace.dir}"
+                            class:t-live={trace.live && !trace.lit}
+                            class:t-lit={trace.lit}
+                        ></span>
                     {/each}
-                    <!-- Centre dot ties traces together -->
-                    <span class="node"></span>
+                    <span
+                        class="node"
+                        class:n-live={gameState.grid[r][c].energized && !gameState.grid[r][c].lit}
+                        class:n-lit={gameState.grid[r][c].lit}
+                    ></span>
                 {/if}
 
-                <!-- Icon / label -->
                 {#if cellLabel(r, c)}
                     <span class="lbl">{cellLabel(r, c)}</span>
                 {/if}
 
-                <!-- Glow overlay for lit bulb -->
                 {#if gameState.grid[r][c].type === 'light' && gameState.grid[r][c].lit}
                     <span class="glow"></span>
                 {/if}
@@ -125,7 +127,6 @@
         grid-template-columns: repeat(var(--cols), 1fr);
         grid-template-rows:    repeat(var(--rows), 1fr);
         gap: 2px;
-        /* Fill parent completely */
         width: 100%;
         height: 100%;
         padding: 6px;
@@ -136,7 +137,6 @@
     /* ── Cell ── */
     .cell {
         position: relative;
-        /* aspect-ratio keeps cells square as grid scales */
         aspect-ratio: 1;
         min-width: 0;
         min-height: 0;
@@ -159,15 +159,10 @@
     .cell.ct-light    { background: #1a1400; border-color: #383000; }
     .cell.ct-resistor { background: #180d07; border-color: #381e0e; }
 
-    /* ── Energized (battery-connected, green) ── */
-    .cell.energized                { background: #05180b !important; border-color: #00bb55 !important; }
-    .cell.energized .trace         { background: #00ff88 !important; box-shadow: 0 0 5px #00ff88; }
-    .cell.energized .node          { background: #00ff88 !important; box-shadow: 0 0 5px #00ff88; }
-
-    /* ── Lit bulb (gold) ── */
-    .cell.lit                      { background: #1c1400 !important; border-color: #ffcc00 !important; }
-    .cell.lit .trace               { background: #ffcc00 !important; box-shadow: 0 0 5px #ffcc00; }
-    .cell.lit .node                { background: #ffcc00 !important; box-shadow: 0 0 5px #ffcc00; }
+    /* Energized cell border (battery-connected loop) */
+    .cell.energized { background: #05180b !important; border-color: #00bb55 !important; }
+    /* Lit cell border */
+    .cell.lit       { background: #1c1400 !important; border-color: #ffcc00 !important; }
 
     /* ── Traces ── */
     .trace {
@@ -178,14 +173,19 @@
         z-index: 1;
         transition: background .12s, box-shadow .12s;
     }
-    /* Horizontal */
+    /* Horizontal arms */
     .trace-east, .trace-west { height: 32%; width: 52%; top: 34%; }
     .trace-east  { right: 0; }
     .trace-west  { left:  0; }
-    /* Vertical */
+    /* Vertical arms */
     .trace-north, .trace-south { width: 32%; height: 52%; left: 34%; }
     .trace-north { top:    0; }
     .trace-south { bottom: 0; }
+
+    /* Live = both ends energised */
+    .trace.t-live { background: #00ff88; box-shadow: 0 0 5px #00ff88; }
+    /* Lit  = both ends are lit bulbs (gold) */
+    .trace.t-lit  { background: #ffcc00; box-shadow: 0 0 5px #ffcc00; }
 
     /* ── Centre node ── */
     .node {
@@ -197,6 +197,8 @@
         pointer-events: none;
         transition: background .12s, box-shadow .12s;
     }
+    .node.n-live { background: #00ff88; box-shadow: 0 0 5px #00ff88; }
+    .node.n-lit  { background: #ffcc00; box-shadow: 0 0 5px #ffcc00; }
 
     /* ── Label ── */
     .lbl {
@@ -214,8 +216,8 @@
         color: #ffd700;
     }
     .ct-switch.energized .lbl { color: #00ff88; }
-    .ct-battery .lbl  { font-size: clamp(0.7rem, 1.8vw, 1.2rem); }
-    .ct-light .lbl    { font-size: clamp(0.7rem, 1.8vw, 1.2rem); }
+    .ct-battery .lbl { font-size: clamp(0.7rem, 1.8vw, 1.2rem); }
+    .ct-light   .lbl { font-size: clamp(0.7rem, 1.8vw, 1.2rem); }
 
     /* ── Bulb glow ── */
     .glow {
