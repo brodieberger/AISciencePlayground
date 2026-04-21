@@ -4,6 +4,7 @@
 	import {buildPhysicsContext} from '$lib/physics/game.svelte';
 	import {buildChemistryContext} from '$lib/chemistry/game.svelte';
 	import {buildCircuitryContext} from '$lib/circuitry/game.svelte';
+	import Lumi from './Lumi.svelte';
 
 	async function handleAskAI() {
 		const context = getContextForGame();
@@ -34,14 +35,14 @@
 </script>
 
 <div class="ai-panel">
-<img src="/scientists.jpg" alt="AI Panel Image" class="ai-image" />
+	<Lumi />
 
 	<input
 		type="text"
-		placeholder="Ask the AI for help..."
+		placeholder="Ask Lumi for help..."
 		bind:value={uiState.aiPrompt}
 	/>
-	<button onclick={handleAskAI}>Ask AI</button>
+	<button onclick={handleAskAI}>Ask Lumi ✨</button>
 	<p class="ai-output">{uiState.aiResponse}</p>
 </div>
 
@@ -58,8 +59,8 @@ input {
 
 input:focus {
 	outline: none;
-	border-color: #66ccff;
-	box-shadow: 0 0 8px #66ccff;
+	border-color: #FFD54F;
+	box-shadow: 0 0 8px #FFD54F80;
 }
 
 button {
@@ -68,16 +69,22 @@ button {
 	margin-bottom: 10px;
 	border: none;
 	border-radius: 4px;
-	background-color: #66ccff;
-	color: #0b1020;
+	background: linear-gradient(135deg, #FFD54F, #FFC107);
+	color: #3E2723;
 	font-weight: bold;
 	cursor: pointer;
 	transition: all 0.2s ease;
+	font-size: 0.9rem;
 }
 
 button:hover {
-	background-color: #33aaff;
-	box-shadow: 0 0 12px #33aaff;
+	background: linear-gradient(135deg, #FFEE58, #FFD54F);
+	box-shadow: 0 0 16px #FFD54F60;
+	transform: translateY(-1px);
+}
+
+button:active {
+	transform: translateY(0);
 }
 
 .ai-output {
@@ -89,15 +96,5 @@ button:hover {
 	min-height: 60px;
 	box-shadow: inset 0 0 8px #000;
 	overflow-wrap: break-word;
-}
-
-.ai-image {
-	width: 100%;
-	height: auto;
-	max-width: 767px;
-	max-height: 506px;
-	margin: 10px 0;
-	border-radius: 8px;
-	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 </style>
