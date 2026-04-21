@@ -76,7 +76,7 @@ export const gameState = $state({
     sandboxMode:  false,
 });
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Adjacency helpers ─────────────────────────────────────────────────────────
 
 const DIRS: [number, number][] = [[-1,0],[1,0],[0,-1],[0,1]];
 
@@ -84,11 +84,19 @@ function inBounds(grid: Cell[][], r: number, c: number): boolean {
     return r >= 0 && r < grid.length && c >= 0 && c < (grid[0]?.length ?? 0);
 }
 
-// A cell conducts if it is non-empty AND (not a switch OR switch is closed)
+// Full conductance: non-empty, and if switch then closed
 function conducts(cell: Cell): boolean {
     if (cell.type === 'empty')  return false;
     if (cell.type === 'switch') return cell.switchClosed;
     return true;
+}
+
+// Short-circuit conductance: same as full but loads (lights/resistors) are
+// treated as insulators.  A battery in a cycle under this rule means there is
+// a load-free path back to it — i.e. a short circuit.
+function conductsNoLoad(cell: Cell): boolean {
+    if (cell.type === 'light' || cell.type === 'resistor') return false;
+    return conducts(cell);
 }
 
 function openCircuitHint(grid: Cell[][]): string {
@@ -97,18 +105,65 @@ function openCircuitHint(grid: Cell[][]): string {
         : 'Circuit is open. Connect components into a closed loop.';
 }
 
+// ── 2-core decomposition ──────────────────────────────────────────────────────
+//
+// Returns a `removed[r][c]` boolean grid.
+// Iteratively strips cells whose degree (under the given conductance function)
+// falls below 2.  Survivors all lie on at least one simple cycle.
+// This is the standard "2-core" or "k-core with k=2" of the graph.
+
+function twoCore(
+    grid: Cell[][],
+    rows: number,
+    cols: number,
+    conductFn: (cell: Cell) => boolean,
+): boolean[][] {
+    const deg     = Array.from({length: rows}, () => new Array<number>(cols).fill(0));
+    const removed = Array.from({length: rows}, () => new Array<boolean>(cols).fill(false));
+
+    for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++) {
+            if (!conductFn(grid[r][c])) continue;
+            for (const [dr, dc] of DIRS) {
+                const nr = r+dr, nc = c+dc;
+                if (inBounds(grid, nr, nc) && conductFn(grid[nr][nc])) deg[r][c]++;
+            }
+        }
+
+    const q: [number, number][] = [];
+    for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++)
+            if (conductFn(grid[r][c]) && deg[r][c] < 2) q.push([r, c]);
+
+    let head = 0;
+    while (head < q.length) {
+        const [r, c] = q[head++];
+        if (removed[r][c] || !conductFn(grid[r][c]) || deg[r][c] >= 2) continue;
+        removed[r][c] = true;
+        for (const [dr, dc] of DIRS) {
+            const nr = r+dr, nc = c+dc;
+            if (!inBounds(grid, nr, nc) || removed[nr][nc] || !conductFn(grid[nr][nc])) continue;
+            if (--deg[nr][nc] < 2) q.push([nr, nc]);
+        }
+    }
+
+    return removed;
+}
+
 // ── Circuit Solver ────────────────────────────────────────────────────────────
 //
-// Phase 1 — 2-core decomposition (dead-end elimination):
-//   Iteratively remove any conducting cell whose degree in the conducting graph
-//   is less than 2.  What remains is the "2-core": every surviving cell lies on
-//   at least one simple cycle.  Wires on open arms never carry real current.
+// Phase 1 — Short-circuit detection:
+//   Run 2-core with loads (lights/resistors) treated as open.  If any battery
+//   survives, there is a cycle that bypasses all loads entirely — a true short
+//   circuit.  Current always takes the path of least resistance, so even one
+//   load-free path shorts the entire loop regardless of other paths with bulbs.
 //
-// Phase 2 — BFS within the 2-core from each battery:
-//   All cells reachable from a battery through cycle cells are energised.
-//   If any load (light / resistor) is reachable the circuit is valid;
-//   if not it is a short.  Multiple batteries are each processed independently
-//   so parallel and series topologies all work correctly.
+// Phase 2 — Valid-circuit detection:
+//   Run 2-core with full conductance.  Every battery that survives is on a
+//   cycle that necessarily goes through at least one load (Phase 1 passed).
+//   BFS within cycle cells from each battery to find its component; energise
+//   all cells in it.  Multiple batteries in separate components are each
+//   handled independently.
 
 function solveCircuit(): void {
     const grid    = gameState.grid;
@@ -116,114 +171,85 @@ function solveCircuit(): void {
     const rows    = grid.length;
     const cols    = grid[0]?.length ?? 0;
 
-    // Reset powered state
     for (const row of grid)
         for (const cell of row) { cell.energized = false; cell.lit = false; }
 
-    // ── Phase 1: compute degree in the conducting graph ───────────────────────
-    const deg     = Array.from({length: rows}, () => new Array<number>(cols).fill(0));
-    const removed = Array.from({length: rows}, () => new Array<boolean>(cols).fill(false));
-
-    for (let r = 0; r < rows; r++)
-        for (let c = 0; c < cols; c++) {
-            if (!conducts(grid[r][c])) continue;
-            for (const [dr, dc] of DIRS) {
-                const nr = r+dr, nc = c+dc;
-                if (inBounds(grid, nr, nc) && conducts(grid[nr][nc])) deg[r][c]++;
-            }
-        }
-
-    // Iteratively strip dead ends; survivors all lie on cycles
-    const deadQ: [number, number][] = [];
-    for (let r = 0; r < rows; r++)
-        for (let c = 0; c < cols; c++)
-            if (conducts(grid[r][c]) && deg[r][c] < 2) deadQ.push([r, c]);
-
-    let dHead = 0;
-    while (dHead < deadQ.length) {
-        const [r, c] = deadQ[dHead++];
-        if (removed[r][c] || !conducts(grid[r][c]) || deg[r][c] >= 2) continue;
-        removed[r][c] = true;
-        for (const [dr, dc] of DIRS) {
-            const nr = r+dr, nc = c+dc;
-            if (!inBounds(grid, nr, nc) || removed[nr][nc] || !conducts(grid[nr][nc])) continue;
-            if (--deg[nr][nc] < 2) deadQ.push([nr, nc]);
-        }
-    }
-
-    // ── Phase 2: classify batteries, early-out if none in a cycle ────────────
-    let hasBattery  = false;
-    let cycleHasBat = false;
-
-    for (let r = 0; r < rows; r++)
-        for (let c = 0; c < cols; c++)
-            if (grid[r][c].type === 'battery') {
-                hasBattery = true;
-                if (!removed[r][c]) cycleHasBat = true;
-            }
+    let hasBattery = false;
+    for (const row of grid)
+        for (const cell of row)
+            if (cell.type === 'battery') { hasBattery = true; break; }
 
     if (!hasBattery) {
         _commit(false, false, 'Place a Battery to power the circuit.');
         return;
     }
+
+    // ── Phase 1: short-circuit check ─────────────────────────────────────────
+    if (!sandbox) {
+        const shortRemoved = twoCore(grid, rows, cols, conductsNoLoad);
+        for (let r = 0; r < rows; r++)
+            for (let c = 0; c < cols; c++)
+                if (grid[r][c].type === 'battery' && !shortRemoved[r][c]) {
+                    _commit(false, true,
+                        'Short circuit! Every path from the battery needs a Bulb or Resistor.');
+                    return;
+                }
+    }
+
+    // ── Phase 2: valid-circuit check ─────────────────────────────────────────
+    const fullRemoved = twoCore(grid, rows, cols, conducts);
+
+    let cycleHasBat = false;
+    for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++)
+            if (grid[r][c].type === 'battery' && !fullRemoved[r][c])
+                cycleHasBat = true;
+
     if (!cycleHasBat) {
         _commit(false, false, openCircuitHint(grid));
         return;
     }
 
-    // ── Phase 2: BFS per battery through cycle cells ──────────────────────────
-    let anySolved = false;
-    let anyShort  = false;
-    // Track batteries already covered by a previous BFS to avoid duplicate work
+    // BFS from each cycle battery to find connected cycle components
     const coveredBats = new Set<string>();
+    let anySolved = false;
 
     for (let r = 0; r < rows; r++)
         for (let c = 0; c < cols; c++) {
-            if (grid[r][c].type !== 'battery' || removed[r][c]) continue;
+            if (grid[r][c].type !== 'battery' || fullRemoved[r][c]) continue;
             const startKey = `${r},${c}`;
             if (coveredBats.has(startKey)) continue;
 
             const visited   = new Set<string>([startKey]);
             const q: [number, number][] = [[r, c]];
             const component: [number, number][] = [[r, c]];
-            let hasLoad = false;
             let qi = 0;
 
             while (qi < q.length) {
                 const [cr, cc] = q[qi++];
                 for (const [dr, dc] of DIRS) {
                     const nr = cr+dr, nc = cc+dc;
-                    if (!inBounds(grid, nr, nc) || removed[nr][nc]) continue;
+                    if (!inBounds(grid, nr, nc) || fullRemoved[nr][nc]) continue;
                     if (!conducts(grid[nr][nc])) continue;
                     const k = `${nr},${nc}`;
                     if (visited.has(k)) continue;
                     visited.add(k);
                     component.push([nr, nc]);
-                    const t = grid[nr][nc].type;
-                    if (t === 'light' || t === 'resistor') hasLoad = true;
-                    // Mark co-located batteries so we don't double-process same component
-                    if (t === 'battery') coveredBats.add(k);
+                    if (grid[nr][nc].type === 'battery') coveredBats.add(k);
                     q.push([nr, nc]);
                 }
             }
             coveredBats.add(startKey);
 
-            if (!hasLoad && !sandbox) {
-                anyShort = true;
-            } else {
-                anySolved = true;
-                for (const [er, ec] of component) {
-                    grid[er][ec].energized = true;
-                    if (grid[er][ec].type === 'light') grid[er][ec].lit = true;
-                }
+            anySolved = true;
+            for (const [er, ec] of component) {
+                grid[er][ec].energized = true;
+                if (grid[er][ec].type === 'light') grid[er][ec].lit = true;
             }
         }
 
-    // ── Build hint ────────────────────────────────────────────────────────────
     let hint: string;
-    if (anyShort && !anySolved) {
-        hint = 'Short circuit! Add a Bulb or Resistor to the loop.';
-    } else if (anySolved) {
+    if (anySolved) {
         const al = grid.flat().filter(c => c.type === 'light' && c.lit).length;
         const tl = grid.flat().filter(c => c.type === 'light').length;
         hint = tl > 0 ? `✓ Circuit complete! ${al}/${tl} bulbs lit.` : '✓ Circuit complete!';
@@ -231,7 +257,7 @@ function solveCircuit(): void {
         hint = openCircuitHint(grid);
     }
 
-    _commit(anySolved, anyShort && !anySolved, hint);
+    _commit(anySolved, false, hint);
 }
 
 function _commit(solved: boolean, sc: boolean, hint: string): void {
