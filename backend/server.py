@@ -17,21 +17,20 @@ def ai_hint():
     if game_type == "chemistry_generation":
         elements = context.get("elements", [])
 
-        system_prompt = """
-You are an expert chemistry engine for an educational sandbox.
-When given a list of elements, generate a chemically plausible (or fun, sci-fi but logically consistent) compound.
-You MUST return ONLY a valid JSON object matching this exact schema:
-{
-    "formula": "String (use unicode subscripts if needed, e.g., H₂O)",
-    "commonName": "String",
-    "physicalState": "Must be exactly one of: 'solid', 'liquid', 'gas', 'plasma', 'unknown'",
-    "color": "String (a valid hex code, e.g., '#ffd54f')",
-    "dangerLevel": "Must be exactly one of: 'safe', 'low', 'moderate', 'high', 'extreme'",
-    "stability": "String (e.g., 'stable', 'highly reactive')",
-    "uses": "String (Brief description of what it is used for)",
-    "reactionDescription": "String (Briefly describe how these atoms bonded)"
-}
-"""
+        system_prompt = (
+            "You are an expert chemistry engine for an educational sandbox. "
+            "When given a list of elements, generate a chemically plausible (or fun, sci-fi but logically consistent) compound. "
+            "Return ONLY a valid JSON object with these exact keys: "
+            "formula (string, use unicode subscripts e.g. H\u2082O), "
+            "commonName (string), "
+            "physicalState (exactly one of: solid, liquid, gas, plasma, unknown), "
+            "color (valid hex code e.g. #ffd54f), "
+            "dangerLevel (exactly one of: safe, low, moderate, high, extreme), "
+            "stability (string e.g. stable or highly reactive), "
+            "uses (string, brief real-world description), "
+            "reactionDescription (string, brief bonding explanation)."
+        )
+
         try:
             response = ollama.chat(
                 model="phi3",
@@ -45,9 +44,10 @@ You MUST return ONLY a valid JSON object matching this exact schema:
             generated_compound = json.loads(response['message']['content'])
             print(json.dumps(generated_compound, indent=4))
             return jsonify({"reply": generated_compound})
+
         except Exception as e:
             print(f"Generation Error: {e}")
-            return jsonify({"error": "Failed to generate compound"}), 500
+            return jsonify({"error": str(e)}), 500
 
     elif game_type == "physics":
         ball = context.get("ball", {})
@@ -66,7 +66,7 @@ Placed objects: {placed_prefabs}
 Remaining inventory: {inventory}
 
 Explain briefly using simple words a child could understand. No more than three sentences.
-Do not use coordinates — describe positions relatively. The ball gains momentum by dropping and rolling.
+Do not use coordinates - describe positions relatively. The ball gains momentum by dropping and rolling.
 The player must click "Release Ball" to start.
 """
 

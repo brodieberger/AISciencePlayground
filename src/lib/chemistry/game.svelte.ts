@@ -312,35 +312,9 @@ export async function triggerReaction() {
     }
 }
 
-// ── API layer (swap backend URL when ready) ───────────────────────────────────
+// ── Hardcoded reactions ───────────────────────────────────────────────────────
 
-const API_BASE = '/api';  // replace with your Express server base URL
-
-async function fetchReaction(slots: ReactionSlot[]): Promise<CompoundResult> {
-    const payload = {
-        elements: slots.map(s => ({ symbol: s.element.symbol, quantity: s.quantity })),
-    };
-
-    // ── STUB: remove this block and uncomment the fetch below when backend is ready ──
-    return stubReaction(slots);
-
-    // ── Real backend call (uncomment when ready): ──
-    // const res = await fetch(`${API_BASE}/chemistry/react`, {
-    //     method: 'POST',
-    //     headers: { 'Content-Type': 'application/json' },
-    //     body: JSON.stringify(payload),
-    // });
-    // if (!res.ok) {
-    //     const err = await res.json().catch(() => ({}));
-    //     throw new Error(err.message ?? `Server error ${res.status}`);
-    // }
-    // return res.json() as Promise<CompoundResult>;
-}
-
-// ── Stub reactions for development ───────────────────────────────────────────
-// Returns realistic hardcoded results for common combos; falls back to a generic result.
-
-const STUB_DB: Record<string, CompoundResult> = {
+const KNOWN_REACTIONS: Record<string, CompoundResult> = {
     'H-O': {
         formula: 'H₂O', commonName: 'Water', physicalState: 'liquid',
         color: '#64b5f6', dangerLevel: 'safe', stability: 'stable',
@@ -362,13 +336,6 @@ const STUB_DB: Record<string, CompoundResult> = {
         reactionDescription: 'Hydrogen and chlorine form a polar covalent bond. Dissolves in water to form a strong acid.',
         fromCache: true,
     },
-    'Na-O': {
-        formula: 'Na₂O', commonName: 'Sodium Oxide', physicalState: 'solid',
-        color: '#fff3e0', dangerLevel: 'moderate', stability: 'unstable',
-        uses: 'Reacts vigorously with water to form sodium hydroxide (NaOH).',
-        reactionDescription: 'Sodium reduces oxygen, forming a basic oxide that reacts violently with water.',
-        fromCache: true,
-    },
     'Fe-O': {
         formula: 'Fe₂O₃', commonName: 'Iron Oxide (Rust)', physicalState: 'solid',
         color: '#bf360c', dangerLevel: 'safe', stability: 'stable',
@@ -381,6 +348,27 @@ const STUB_DB: Record<string, CompoundResult> = {
         color: '#e0f2f1', dangerLevel: 'low', stability: 'stable',
         uses: 'Photosynthesis, carbonated drinks, fire suppression.',
         reactionDescription: 'Carbon combustion with sufficient oxygen produces CO₂.',
+        fromCache: true,
+    },
+    'H-N': {
+        formula: 'NH₃', commonName: 'Ammonia', physicalState: 'gas',
+        color: '#f3e5f5', dangerLevel: 'moderate', stability: 'stable',
+        uses: 'Fertilizer production, cleaning agents, refrigerant.',
+        reactionDescription: 'Nitrogen and hydrogen combine under pressure via the Haber process.',
+        fromCache: true,
+    },
+    'Na-O': {
+        formula: 'Na₂O', commonName: 'Sodium Oxide', physicalState: 'solid',
+        color: '#fff3e0', dangerLevel: 'moderate', stability: 'unstable',
+        uses: 'Reacts vigorously with water to form sodium hydroxide (NaOH).',
+        reactionDescription: 'Sodium reduces oxygen, forming a basic oxide that reacts violently with water.',
+        fromCache: true,
+    },
+    'H-Na-O': {
+        formula: 'NaOH', commonName: 'Sodium Hydroxide (Lye)', physicalState: 'solid',
+        color: '#e8eaf6', dangerLevel: 'high', stability: 'stable',
+        uses: 'Soap making, drain cleaner, paper production.',
+        reactionDescription: 'Sodium oxide reacts with water to produce this strongly caustic base.',
         fromCache: true,
     },
     'Mg-O': {
@@ -397,13 +385,6 @@ const STUB_DB: Record<string, CompoundResult> = {
         reactionDescription: 'Calcium reacts exothermically with oxygen to form calcium oxide.',
         fromCache: true,
     },
-    'H-N': {
-        formula: 'NH₃', commonName: 'Ammonia', physicalState: 'gas',
-        color: '#f3e5f5', dangerLevel: 'moderate', stability: 'stable',
-        uses: 'Fertilizer production, cleaning agents, refrigerant.',
-        reactionDescription: 'Nitrogen and hydrogen combine under pressure via the Haber process.',
-        fromCache: true,
-    },
     'Cu-O': {
         formula: 'CuO', commonName: 'Copper Oxide', physicalState: 'solid',
         color: '#1a237e', dangerLevel: 'low', stability: 'stable',
@@ -418,13 +399,6 @@ const STUB_DB: Record<string, CompoundResult> = {
         reactionDescription: 'Sodium and bromine undergo an ionic reaction similar to table salt formation.',
         fromCache: true,
     },
-    'H-O-Na': {
-        formula: 'NaOH', commonName: 'Sodium Hydroxide (Lye)', physicalState: 'solid',
-        color: '#e8eaf6', dangerLevel: 'high', stability: 'stable',
-        uses: 'Soap making, drain cleaner, paper production.',
-        reactionDescription: 'Sodium oxide reacts with water to produce this strongly caustic base.',
-        fromCache: true,
-    },
     'Au-Cl': {
         formula: 'AuCl₃', commonName: 'Gold(III) Chloride', physicalState: 'solid',
         color: '#ff6f00', dangerLevel: 'moderate', stability: 'unstable',
@@ -434,31 +408,36 @@ const STUB_DB: Record<string, CompoundResult> = {
     },
 };
 
-function stubReaction(slots: ReactionSlot[]): CompoundResult {
+// ── API layer ─────────────────────────────────────────────────────────────────
+
+async function fetchReaction(slots: ReactionSlot[]): Promise<CompoundResult> {
+    // Check hardcoded results first — instant, no network call needed
     const key = slots.map(s => s.element.symbol).sort().join('-');
+    if (KNOWN_REACTIONS[key]) return KNOWN_REACTIONS[key];
 
-    if (STUB_DB[key]) return { ...STUB_DB[key], fromCache: false };
+    const url = uiState.aiMode === 'local'
+        ? 'http://localhost:8080/ai_hint'
+        : 'https://www.brodieberger.com/ai_hint';
 
-    // Generic fallback for unknown combinations
-    const symbols = slots.map(s => s.element.symbol).join('');
-    const totalReactivity = slots.reduce((sum, s) => sum + s.element.reactivity, 0);
-    const danger: DangerLevel =
-        totalReactivity >= 8 ? 'extreme' :
-        totalReactivity >= 6 ? 'high' :
-        totalReactivity >= 4 ? 'moderate' : 'low';
-
-    return {
-        formula: symbols + 'ₓ',
-        commonName: 'Unknown Compound',
-        physicalState: 'solid',
-        color: '#90a4ae',
-        dangerLevel: danger,
-        stability: 'unknown',
-        uses: 'Properties unknown. This combination has not been catalogued.',
-        reactionDescription: `Reaction between ${slots.map(s => s.element.name).join(' and ')}. Result uncertain.`,
-        fromCache: false,
-    };
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            game_type: 'chemistry_generation',
+            user_prompt: '',
+            context: {
+                elements: slots.map(s => ({ symbol: s.element.symbol, quantity: s.quantity })),
+            },
+        }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { message?: string };
+        throw new Error(err.message ?? `Server error ${res.status}`);
+    }
+    const data = await res.json();
+    return { ...data.reply, fromCache: false };
 }
+
 
 import { uiState } from '$lib/game-ui.svelte';
 
