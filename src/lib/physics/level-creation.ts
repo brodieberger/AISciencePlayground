@@ -3,6 +3,42 @@ import type { LevelConfig, PrefabType } from "./level-data";
 
 const { World, Bodies, Body, Constraint } = Matter;
 
+const GEO_FILL = '#2d3a4a';
+const GEO_STROKE = '#4a5a6a';
+
+export function createGeometry(world: Matter.World, level: LevelConfig): Matter.Body[] {
+    if (!level.geometry) return [];
+
+    const bodies: Matter.Body[] = [];
+
+    for (const g of level.geometry) {
+        const style = {
+            isStatic: true,
+            label: 'geometry',
+            render: {
+                fillStyle: g.color ?? GEO_FILL,
+                strokeStyle: GEO_STROKE,
+                lineWidth: 2,
+            },
+        };
+
+        let body: Matter.Body;
+        if (g.type === 'rect') {
+            body = Bodies.rectangle(g.x, g.y, g.w, g.h, {
+                ...style,
+                angle: g.angle ?? 0,
+            });
+        } else {
+            body = Bodies.circle(g.x, g.y, g.r, style);
+        }
+
+        bodies.push(body);
+    }
+
+    World.add(world, bodies);
+    return bodies;
+}
+
 export let cageWalls: Matter.Body[] = [];
 
 export function createBounds(world: Matter.World, w: number, h: number) {
