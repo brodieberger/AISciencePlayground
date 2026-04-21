@@ -173,7 +173,7 @@
     .right-col {
         display: flex; flex-direction: column;
         gap: 5px; flex-shrink: 0;
-        min-width: 150px; max-width: 215px;
+        min-width: 150px; max-width: 500px;
     }
 
     .hint {
