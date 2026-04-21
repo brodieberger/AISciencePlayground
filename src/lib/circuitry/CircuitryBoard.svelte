@@ -26,10 +26,10 @@
     }
 
     // ── Trace helpers ─────────────────────────────────────────────────────────
-    // A trace is "live" only when both ends are energised, "lit" when both are lit.
-    // This ensures dead-end arms (connected but not in a loop) stay dim.
+    // Traces get a state class only when BOTH ends share that state, so dead-end
+    // arms and partial connections stay dim.
 
-    type TraceInfo = { dir: string; live: boolean; lit: boolean };
+    type TraceInfo = { dir: string; live: boolean; lit: boolean; short: boolean };
 
     function traceDirs(r: number, c: number): TraceInfo[] {
         const cell = gameState.grid[r]?.[c];
@@ -44,8 +44,9 @@
             if (n && n.type !== 'empty') {
                 result.push({
                     dir,
-                    live: cell.energized && n.energized,
-                    lit:  cell.lit && n.lit,
+                    live:  cell.energized  && n.energized,
+                    lit:   cell.lit        && n.lit,
+                    short: cell.shortPath  && n.shortPath,
                 });
             }
         }
@@ -62,6 +63,7 @@
             cell.type !== 'empty' ? `ct-${cell.type}` : '',
             cell.energized        ? 'energized'        : '',
             cell.lit              ? 'lit'               : '',
+            cell.shortPath        ? 'shortpath'         : '',
         ].filter(Boolean).join(' ');
     }
 
@@ -97,14 +99,16 @@
                     {#each traceDirs(r, c) as trace}
                         <span
                             class="trace trace-{trace.dir}"
-                            class:t-live={trace.live && !trace.lit}
-                            class:t-lit={trace.lit}
+                            class:t-live={trace.live  && !trace.lit && !trace.short}
+                            class:t-lit={trace.lit    && !trace.short}
+                            class:t-short={trace.short}
                         ></span>
                     {/each}
                     <span
                         class="node"
-                        class:n-live={gameState.grid[r][c].energized && !gameState.grid[r][c].lit}
-                        class:n-lit={gameState.grid[r][c].lit}
+                        class:n-live={gameState.grid[r][c].energized && !gameState.grid[r][c].lit && !gameState.grid[r][c].shortPath}
+                        class:n-lit={gameState.grid[r][c].lit && !gameState.grid[r][c].shortPath}
+                        class:n-short={gameState.grid[r][c].shortPath}
                     ></span>
                 {/if}
 
@@ -159,10 +163,12 @@
     .cell.ct-light    { background: #1a1400; border-color: #383000; }
     .cell.ct-resistor { background: #180d07; border-color: #381e0e; }
 
-    /* Energized cell border (battery-connected loop) */
+    /* Energized (green) */
     .cell.energized { background: #05180b !important; border-color: #00bb55 !important; }
-    /* Lit cell border */
+    /* Lit bulb (gold) */
     .cell.lit       { background: #1c1400 !important; border-color: #ffcc00 !important; }
+    /* Short-circuit path (red) */
+    .cell.shortpath { background: #200808 !important; border-color: #cc2222 !important; }
 
     /* ── Traces ── */
     .trace {
@@ -183,9 +189,15 @@
     .trace-south { bottom: 0; }
 
     /* Live = both ends energised */
-    .trace.t-live { background: #00ff88; box-shadow: 0 0 5px #00ff88; }
-    /* Lit  = both ends are lit bulbs (gold) */
-    .trace.t-lit  { background: #ffcc00; box-shadow: 0 0 5px #ffcc00; }
+    .trace.t-live  { background: #00ff88; box-shadow: 0 0 5px #00ff88; }
+    /* Lit  = both ends lit */
+    .trace.t-lit   { background: #ffcc00; box-shadow: 0 0 5px #ffcc00; }
+    /* Short = both ends on short-circuit path */
+    .trace.t-short {
+        background: #ff3333;
+        box-shadow: 0 0 6px #ff3333;
+        animation: shortpulse .55s ease-in-out infinite alternate;
+    }
 
     /* ── Centre node ── */
     .node {
@@ -197,8 +209,18 @@
         pointer-events: none;
         transition: background .12s, box-shadow .12s;
     }
-    .node.n-live { background: #00ff88; box-shadow: 0 0 5px #00ff88; }
-    .node.n-lit  { background: #ffcc00; box-shadow: 0 0 5px #ffcc00; }
+    .node.n-live  { background: #00ff88; box-shadow: 0 0 5px #00ff88; }
+    .node.n-lit   { background: #ffcc00; box-shadow: 0 0 5px #ffcc00; }
+    .node.n-short {
+        background: #ff3333;
+        box-shadow: 0 0 6px #ff3333;
+        animation: shortpulse .55s ease-in-out infinite alternate;
+    }
+
+    @keyframes shortpulse {
+        from { opacity: .55; box-shadow: 0 0 3px #ff3333; }
+        to   { opacity: 1;   box-shadow: 0 0 10px #ff4444; }
+    }
 
     /* ── Label ── */
     .lbl {
