@@ -314,92 +314,94 @@ export async function triggerReaction() {
 
 // ── Hardcoded reactions ───────────────────────────────────────────────────────
 
+// Keys encode both symbol and quantity: `SYMBOL:QTY` parts sorted alphabetically.
+// e.g. 2×H + 1×O → 'H:2-O:1'   |   1×H + 1×O → 'H:1-O:1' (goes to AI)
 const KNOWN_REACTIONS: Record<string, CompoundResult> = {
-    'H-O': {
+    'H:2-O:1': {
         formula: 'H₂O', commonName: 'Water', physicalState: 'liquid',
         color: '#64b5f6', dangerLevel: 'safe', stability: 'stable',
         uses: 'Universal solvent. Essential for all known life.',
         reactionDescription: 'Two hydrogen atoms bond with one oxygen via covalent bonds.',
         fromCache: true,
     },
-    'Na-Cl': {
+    'Cl:1-Na:1': {
         formula: 'NaCl', commonName: 'Table Salt', physicalState: 'solid',
         color: '#f5f5f5', dangerLevel: 'safe', stability: 'stable',
         uses: 'Food seasoning, food preservation, industrial chemical.',
         reactionDescription: 'Sodium donates its valence electron to chlorine, forming an ionic bond.',
         fromCache: true,
     },
-    'H-Cl': {
+    'Cl:1-H:1': {
         formula: 'HCl', commonName: 'Hydrochloric Acid', physicalState: 'gas',
         color: '#e8f5e9', dangerLevel: 'high', stability: 'stable',
         uses: 'Industrial acid production, stomach acid component, metal cleaning.',
         reactionDescription: 'Hydrogen and chlorine form a polar covalent bond. Dissolves in water to form a strong acid.',
         fromCache: true,
     },
-    'Fe-O': {
+    'Fe:2-O:3': {
         formula: 'Fe₂O₃', commonName: 'Iron Oxide (Rust)', physicalState: 'solid',
         color: '#bf360c', dangerLevel: 'safe', stability: 'stable',
         uses: 'Pigment, thermite reactions, magnetic recording.',
         reactionDescription: 'Iron slowly oxidizes in the presence of oxygen and moisture.',
         fromCache: true,
     },
-    'C-O': {
+    'C:1-O:2': {
         formula: 'CO₂', commonName: 'Carbon Dioxide', physicalState: 'gas',
         color: '#e0f2f1', dangerLevel: 'low', stability: 'stable',
         uses: 'Photosynthesis, carbonated drinks, fire suppression.',
         reactionDescription: 'Carbon combustion with sufficient oxygen produces CO₂.',
         fromCache: true,
     },
-    'H-N': {
+    'H:3-N:1': {
         formula: 'NH₃', commonName: 'Ammonia', physicalState: 'gas',
         color: '#f3e5f5', dangerLevel: 'moderate', stability: 'stable',
         uses: 'Fertilizer production, cleaning agents, refrigerant.',
         reactionDescription: 'Nitrogen and hydrogen combine under pressure via the Haber process.',
         fromCache: true,
     },
-    'Na-O': {
+    'Na:2-O:1': {
         formula: 'Na₂O', commonName: 'Sodium Oxide', physicalState: 'solid',
         color: '#fff3e0', dangerLevel: 'moderate', stability: 'unstable',
         uses: 'Reacts vigorously with water to form sodium hydroxide (NaOH).',
         reactionDescription: 'Sodium reduces oxygen, forming a basic oxide that reacts violently with water.',
         fromCache: true,
     },
-    'H-Na-O': {
+    'H:1-Na:1-O:1': {
         formula: 'NaOH', commonName: 'Sodium Hydroxide (Lye)', physicalState: 'solid',
         color: '#e8eaf6', dangerLevel: 'high', stability: 'stable',
         uses: 'Soap making, drain cleaner, paper production.',
         reactionDescription: 'Sodium oxide reacts with water to produce this strongly caustic base.',
         fromCache: true,
     },
-    'Mg-O': {
+    'Mg:1-O:1': {
         formula: 'MgO', commonName: 'Magnesium Oxide', physicalState: 'solid',
         color: '#fafafa', dangerLevel: 'low', stability: 'stable',
         uses: 'Refractory material, antacid, electrical insulator.',
         reactionDescription: 'Magnesium burns brilliantly in oxygen, producing a blinding white flame.',
         fromCache: true,
     },
-    'Ca-O': {
+    'Ca:1-O:1': {
         formula: 'CaO', commonName: 'Quicklime', physicalState: 'solid',
         color: '#f9fbe7', dangerLevel: 'moderate', stability: 'stable',
         uses: 'Cement production, water treatment, steel making.',
         reactionDescription: 'Calcium reacts exothermically with oxygen to form calcium oxide.',
         fromCache: true,
     },
-    'Cu-O': {
+    'Cu:1-O:1': {
         formula: 'CuO', commonName: 'Copper Oxide', physicalState: 'solid',
         color: '#1a237e', dangerLevel: 'low', stability: 'stable',
         uses: 'Pigment, catalysis, semiconductors.',
         reactionDescription: 'Copper oxidizes when heated, forming a black copper oxide layer.',
         fromCache: true,
     },
-    'Na-Br': {
+    'Br:1-Na:1': {
         formula: 'NaBr', commonName: 'Sodium Bromide', physicalState: 'solid',
         color: '#fce4ec', dangerLevel: 'low', stability: 'stable',
         uses: 'Sedative (historical), photography, flame retardants.',
         reactionDescription: 'Sodium and bromine undergo an ionic reaction similar to table salt formation.',
         fromCache: true,
     },
-    'Au-Cl': {
+    'Au:1-Cl:3': {
         formula: 'AuCl₃', commonName: 'Gold(III) Chloride', physicalState: 'solid',
         color: '#ff6f00', dangerLevel: 'moderate', stability: 'unstable',
         uses: 'Gilding, photography toning, catalysis.',
@@ -411,8 +413,8 @@ const KNOWN_REACTIONS: Record<string, CompoundResult> = {
 // ── API layer ─────────────────────────────────────────────────────────────────
 
 async function fetchReaction(slots: ReactionSlot[]): Promise<CompoundResult> {
-    // Check hardcoded results first — instant, no network call needed
-    const key = slots.map(s => s.element.symbol).sort().join('-');
+    // Check hardcoded results first — key encodes symbol AND quantity
+    const key = slots.map(s => `${s.element.symbol}:${s.quantity}`).sort().join('-');
     if (KNOWN_REACTIONS[key]) return KNOWN_REACTIONS[key];
 
     const url = uiState.aiMode === 'local'

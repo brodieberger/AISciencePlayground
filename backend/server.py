@@ -19,7 +19,9 @@ def ai_hint():
 
         system_prompt = (
             "You are an expert chemistry engine for an educational sandbox. "
-            "When given a list of elements, generate a chemically plausible (or fun, sci-fi but logically consistent) compound. "
+            "Generate a compound using EXACTLY the element quantities provided — do not adjust or normalize the ratios. "
+            "For example, if given 1 H and 1 O, the formula is HO, not H\u2082O. "
+            "If given 2 H and 1 O, then the formula is H\u2082O. "
             "Return ONLY a valid JSON object with these exact keys: "
             "formula (string, use unicode subscripts e.g. H\u2082O), "
             "commonName (string), "

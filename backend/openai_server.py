@@ -366,12 +366,14 @@ def ai_hint():
         elements = context.get("elements", [])
         prompt = (
             "You are an expert chemistry engine for an educational sandbox. "
-            "Generate a chemically plausible (or fun, sci-fi but logically consistent) compound from the given elements. "
+            "Generate a compound using EXACTLY the element quantities provided — do not adjust or normalize the ratios. "
+            "For example, if given 1 H and 1 O, the formula is HO, not H\u2082O. "
+            "If given 2 H and 1 O, then the formula is H\u2082O. "
             "Respond with ONLY a raw JSON object — no markdown, no code fences, no extra text. "
             "Required keys: formula (unicode subscripts e.g. H\u2082O), commonName, "
             "physicalState (solid/liquid/gas/plasma/unknown), color (hex e.g. #ffd54f), "
             "dangerLevel (safe/low/moderate/high/extreme), stability, uses, reactionDescription.\n\n"
-            f"Elements to combine: {elements}"
+            f"Elements to combine (use these exact quantities): {elements}"
         )
         try:
             response = client.responses.create(
