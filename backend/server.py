@@ -64,7 +64,7 @@ def ai_hint():
             "Required keys: formula (unicode subscripts e.g. H\u2082O), commonName, "
             "physicalState (solid/liquid/gas/plasma/unknown), color (hex e.g. #ffd54f), "
             "dangerLevel (safe/low/moderate/high/extreme), stability, uses, reactionDescription.\n\n"
-            f"Elements to combine (use these exact quantities): {elements}" )
+            )
         # 3. Handle empty text boxes
         fallback_question = "I am stuck, what should I do?"
         actual_question = user_message if user_message else fallback_question

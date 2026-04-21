@@ -43,7 +43,6 @@
 		bind:value={uiState.aiPrompt}
 	/>
 	<button onclick={handleAskAI}>Ask Lumi ✨</button>
-	<p class="ai-output">{uiState.aiResponse}</p>
 </div>
 
 <style>
@@ -85,16 +84,5 @@ button:hover {
 
 button:active {
 	transform: translateY(0);
-}
-
-.ai-output {
-	width: 100%;
-	background-color: #111520;
-	border: 1px solid #333;
-	border-radius: 6px;
-	padding: 10px;
-	min-height: 60px;
-	box-shadow: inset 0 0 8px #000;
-	overflow-wrap: break-word;
 }
 </style>

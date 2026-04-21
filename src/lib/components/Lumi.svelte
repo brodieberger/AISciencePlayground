@@ -1,13 +1,68 @@
 <script lang="ts">
 	import { uiState } from '$lib/game-ui.svelte';
+	import { onMount } from 'svelte';
 
 	// Lumi reacts to the AI state
 	let isThinking = $derived(uiState.aiPrompt.length > 0);
-	let hasResponse = $derived(uiState.aiResponse.length > 0);
+
+	// Typewriter state
+	let displayedText = $state('');
+	let isSpeaking = $state(false);
+	let lastResponse = $state('');
+	let typewriterTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Watch for new AI responses and trigger typewriter
+	$effect(() => {
+		const response = uiState.aiResponse;
+		if (response && response !== lastResponse) {
+			lastResponse = response;
+			startTypewriter(response);
+		}
+	});
+
+	function startTypewriter(text: string) {
+		// Clear any existing timer
+		if (typewriterTimer) clearTimeout(typewriterTimer);
+		displayedText = '';
+		isSpeaking = true;
+
+		let i = 0;
+		function typeNext() {
+			if (i < text.length) {
+				displayedText = text.slice(0, i + 1);
+				i++;
+				// Variable speed for natural feel
+				const char = text[i - 1];
+				const delay = char === '.' || char === '!' || char === '?' ? 120 :
+				              char === ',' ? 60 : 
+				              18 + Math.random() * 15;
+				typewriterTimer = setTimeout(typeNext, delay);
+			} else {
+				isSpeaking = false;
+			}
+		}
+		typeNext();
+	}
+
+	// Clean up on destroy
+	onMount(() => {
+		return () => {
+			if (typewriterTimer) clearTimeout(typewriterTimer);
+		};
+	});
 </script>
 
-<div class="lumi-container" class:thinking={isThinking} class:responded={hasResponse}>
+<div class="lumi-container" class:thinking={isThinking} class:speaking={isSpeaking}>
 	<div class="lumi-glow" aria-hidden="true"></div>
+	
+	<!-- Speech bubble -->
+	{#if displayedText}
+		<div class="speech-bubble" class:bubble-speaking={isSpeaking}>
+			<p class="speech-text">{displayedText}<span class="cursor" class:cursor-visible={isSpeaking}>|</span></p>
+			<div class="speech-tail" aria-hidden="true"></div>
+		</div>
+	{/if}
+
 	<svg
 		class="lumi"
 		viewBox="0 0 200 280"
@@ -105,15 +160,30 @@
 			<ellipse class="blink left-blink" cx="78" cy="95" rx="14" ry="0" fill="#FFD54F" />
 			<ellipse class="blink right-blink" cx="122" cy="95" rx="14" ry="0" fill="#FFD54F" />
 
-			<!-- Smile -->
-			<path
-				class="mouth"
-				d="M82 118 Q100 138, 118 118"
-				fill="none"
-				stroke="#795548"
-				stroke-width="2.5"
-				stroke-linecap="round"
-			/>
+			<!-- Mouth — switches between smile and talking mouth -->
+			{#if isSpeaking}
+				<!-- Talking mouth: animated open/close oval -->
+				<ellipse
+					class="talking-mouth"
+					cx="100"
+					cy="125"
+					rx="8"
+					ry="5"
+					fill="#5D4037"
+					stroke="#795548"
+					stroke-width="1.5"
+				/>
+			{:else}
+				<!-- Default smile -->
+				<path
+					class="mouth"
+					d="M82 118 Q100 138, 118 118"
+					fill="none"
+					stroke="#795548"
+					stroke-width="2.5"
+					stroke-linecap="round"
+				/>
+			{/if}
 		</g>
 
 		<!-- Sparkle particles around Lumi -->
@@ -165,6 +235,79 @@
 		filter: drop-shadow(0 8px 20px rgba(255, 213, 79, 0.3));
 	}
 
+	/* ── Speech Bubble ── */
+	.speech-bubble {
+		position: relative;
+		background: linear-gradient(135deg, #1a2a3a 0%, #162030 100%);
+		border: 1.5px solid #FFD54F50;
+		border-radius: 12px;
+		padding: 10px 14px;
+		margin-bottom: 8px;
+		max-width: 260px;
+		min-width: 120px;
+		box-shadow:
+			0 4px 20px rgba(0, 0, 0, 0.3),
+			0 0 15px rgba(255, 213, 79, 0.08),
+			inset 0 1px 0 rgba(255, 255, 255, 0.05);
+		animation: bubble-appear 0.3s ease-out;
+	}
+
+	.bubble-speaking {
+		border-color: #FFD54F80;
+		box-shadow:
+			0 4px 20px rgba(0, 0, 0, 0.3),
+			0 0 20px rgba(255, 213, 79, 0.12),
+			inset 0 1px 0 rgba(255, 255, 255, 0.05);
+	}
+
+	@keyframes bubble-appear {
+		from {
+			opacity: 0;
+			transform: scale(0.8) translateY(8px);
+		}
+		to {
+			opacity: 1;
+			transform: scale(1) translateY(0);
+		}
+	}
+
+	.speech-text {
+		margin: 0;
+		font-size: 0.78rem;
+		line-height: 1.5;
+		color: #e0e8f0;
+		font-family: 'Nunito', sans-serif;
+	}
+
+	.cursor {
+		display: inline;
+		opacity: 0;
+		color: #FFD54F;
+		font-weight: bold;
+		margin-left: 1px;
+	}
+	.cursor-visible {
+		animation: cursor-blink 0.6s step-end infinite;
+	}
+	@keyframes cursor-blink {
+		0%, 50% { opacity: 1; }
+		51%, 100% { opacity: 0; }
+	}
+
+	/* Speech bubble tail (triangle pointing down toward Lumi) */
+	.speech-tail {
+		position: absolute;
+		bottom: -8px;
+		left: 50%;
+		transform: translateX(-50%);
+		width: 0;
+		height: 0;
+		border-left: 8px solid transparent;
+		border-right: 8px solid transparent;
+		border-top: 8px solid #1a2a3a;
+		filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.2));
+	}
+
 	/* ── Float animation ── */
 	@keyframes float {
 		0%, 100% { transform: translateY(0); }
@@ -202,6 +345,16 @@
 	@keyframes blink-anim {
 		0%, 90%, 100% { ry: 0; }
 		95% { ry: 15; }
+	}
+
+	/* ── Talking mouth animation ── */
+	.talking-mouth {
+		animation: mouth-move 0.3s ease-in-out infinite alternate;
+	}
+	@keyframes mouth-move {
+		0% { ry: 3; rx: 7; }
+		50% { ry: 7; rx: 9; }
+		100% { ry: 4; rx: 6; }
 	}
 
 	/* ── Sparkles ── */
@@ -246,15 +399,15 @@
 		background: radial-gradient(circle, #FFD54F50 0%, #FFD54F20 40%, transparent 70%);
 	}
 
-	/* ── Responded state — happy burst ── */
-	.responded .lumi {
-		filter: drop-shadow(0 8px 24px rgba(128, 203, 196, 0.4));
+	/* ── Speaking state — excited glow ── */
+	.speaking .lumi {
+		filter: drop-shadow(0 8px 24px rgba(255, 213, 79, 0.45));
 	}
-	.responded .lumi-glow {
-		background: radial-gradient(circle, #80CBC440 0%, #80CBC420 40%, transparent 70%);
+	.speaking .lumi-glow {
+		animation: glow-pulse 1.5s ease-in-out infinite alternate;
+		background: radial-gradient(circle, #FFD54F45 0%, #FFD54F18 40%, transparent 70%);
 	}
-	.responded .lumi-name {
-		color: #80CBC4;
-		text-shadow: 0 0 12px #80CBC460, 0 0 24px #80CBC430;
+	.speaking .lumi-name {
+		color: #FFEE58;
 	}
 </style>
