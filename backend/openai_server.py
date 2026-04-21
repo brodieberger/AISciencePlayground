@@ -439,6 +439,7 @@ Focus on the state of the circuit and what the player can do to complete the lev
         level = context.get("level", "")
         goal = context.get("goal", "")
         sandbox_mode = context.get("sandboxMode", False)
+        available_elements = context.get("availableElements", [])
         selected_elements = context.get("selectedElements", [])
         last_result = context.get("lastResult", None)
         goal_reached = context.get("goalReached", False)
@@ -451,6 +452,7 @@ User question:
 Level: {level}
 Target formula: {goal}
 Sandbox mode: {sandbox_mode}
+Available elements: {available_elements}
 Currently selected elements: {selected_elements}
 Last reaction result: {last_result}
 Goal reached: {goal_reached}

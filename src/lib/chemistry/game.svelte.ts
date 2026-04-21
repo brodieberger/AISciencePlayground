@@ -451,6 +451,10 @@ export function buildChemistryContext() {
         level: level.name,
         goal: level.targetFormula ?? 'sandbox',
         sandboxMode: level.sandboxMode,
+        availableElements: level.allowedElements.map(sym => {
+            const el = ELEMENT_MAP.get(sym);
+            return el ? { symbol: el.symbol, name: el.name, category: el.category, reactivity: el.reactivity } : { symbol: sym };
+        }),
         selectedElements: gameState.selectedSlots.map(s => ({
             symbol: s.element.symbol,
             quantity: s.quantity,
