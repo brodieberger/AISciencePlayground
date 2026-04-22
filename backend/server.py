@@ -54,21 +54,22 @@ def ai_hint():
     elif game_type == "physics":
         ball = context.get("ball", {})
         goal = context.get("goal", {})
-        lines = context.get("lines", [])
         placed_prefabs = context.get("placedPrefabs", [])
         inventory = context.get("inventory", [])
+        solution = context.get("solution", "")
         prompt = f"""You are a team of scientists inside a 2D physics sandbox for kids.
 
 User question: {user_prompt}
 
 Ball position: {ball}
 Goal position: {goal}
-Drawn lines: {lines}
 Placed objects: {placed_prefabs}
 Remaining inventory: {inventory}
+Intended solution: {solution}
 
 Explain briefly using simple words a child could understand. No more than three sentences.
 Do not use coordinates - describe positions relatively. The ball gains momentum by dropping and rolling.
+Guide the player toward the intended solution without giving it away directly.
 The player must click "Release Ball" to start.
 """
 

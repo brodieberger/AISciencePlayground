@@ -392,9 +392,9 @@ def ai_hint():
     elif game_type == "physics":
         ball = context.get("ball", {})
         goal = context.get("goal", {})
-        lines = context.get("lines", [])
         placed_prefabs = context.get("placedPrefabs", [])
         inventory = context.get("inventory", [])
+        solution = context.get("solution", "")
         prompt = f"""
 You are a team of scientists inside a 2D physics sandbox demo for kids.
 
@@ -403,14 +403,14 @@ User question:
 
 Ball position: {ball}
 Goal position: {goal}
-Drawn lines: {lines}
 Placed objects: {placed_prefabs}
 Remaining inventory: {inventory}
+Intended solution: {solution}
 
 Explain clearly and briefly using simple words that a child could understand.
 No more than three small sentences.
 Do not speak in terms of coordinates. Use relative positions of objects on the screen.
-Sometimes the level is not completable, and they will have to click restart.
+Guide the player toward the intended solution without giving it away directly.
 The ball can only gain momentum by dropping. It is a ball, so it rolls and bounces.
 The player has to click "Release Ball" in order for the game to begin.
 """

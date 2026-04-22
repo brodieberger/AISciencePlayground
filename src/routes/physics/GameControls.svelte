@@ -9,12 +9,13 @@
 		uiState.aiResponse = '';
 	}
 
-	const prefabLabels = {
+	const prefabLabels: Record<PrefabType, string> = {
 		bridge: '🪵 Bridge',
 		bouncepad: '🟣 Bounce Pad',
 		ramp: '📐 Ramp',
-		bumper: '🔵 Bumper'
-	} satisfies Record<PrefabType, string>;
+		bumper: '🔵 Bumper',
+		seesaw: '⚖️ Seesaw',
+	};
 
 	function onDragStart(type: PrefabType) {
 		physicsGameState.activePrefab = type;
