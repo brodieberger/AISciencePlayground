@@ -112,8 +112,26 @@ function init() {
 
                 const pad = isBouncepad(bodyA) ? bodyA : bodyB;
                 const incomingSpeed = Math.hypot(ball.velocity.x, ball.velocity.y);
-                const launchY = -Math.max(12, incomingSpeed * 1.4);
-                Body.setVelocity(ball, { x: ball.velocity.x, y: launchY });
+                const launchSpeed = Math.max(12, incomingSpeed * 1.5);
+
+                // Normal perpendicular to the pad surface (up for a flat horizontal pad)
+                let nx = Math.sin(pad.angle);
+                let ny = -Math.cos(pad.angle);
+
+                // Flip so the normal always points toward the ball's side of the pad
+                const toBallX = ball.position.x - pad.position.x;
+                const toBallY = ball.position.y - pad.position.y;
+                if (toBallX * nx + toBallY * ny < 0) { nx = -nx; ny = -ny; }
+
+                // Preserve half the tangential velocity so the ball doesn't dead-stop sideways
+                const tx = Math.cos(pad.angle);
+                const ty = Math.sin(pad.angle);
+                const tangentialSpeed = ball.velocity.x * tx + ball.velocity.y * ty;
+
+                Body.setVelocity(ball, {
+                    x: nx * launchSpeed + tx * tangentialSpeed * 0.5,
+                    y: ny * launchSpeed + ty * tangentialSpeed * 0.5,
+                });
                 animateBouncePad(pad);
             }
         });

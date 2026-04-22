@@ -62,6 +62,9 @@ export function createBallAndCage(world: Matter.World, level: LevelConfig) {
     const ball = Bodies.circle(x, y, 14, {
         restitution: 0.8,
         mass: 5,
+        friction: 0,
+        frictionAir: 0.004,
+        frictionStatic: 0,
         render: { fillStyle: "#ffffff" },
         label: "Main Ball"
     });
