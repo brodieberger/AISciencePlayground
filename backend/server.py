@@ -32,7 +32,7 @@ def ai_hint():
             "uses (string, brief real-world description), "
             "reactionDescription (string, brief bonding explanation)."
         )
-
+        
         try:
             response = ollama.chat(
                 model="phi3",
