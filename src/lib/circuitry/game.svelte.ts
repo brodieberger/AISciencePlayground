@@ -16,6 +16,7 @@ export interface Cell {
     switchClosed: boolean;   // switch only: true = closed = conducts
     energized:    boolean;   // set by solver
     lit:          boolean;   // light only: set by solver
+    shortPath:    boolean;   // part of the highlighted short-circuit path
 }
 
 export interface CircuitLevel {
@@ -34,21 +35,21 @@ export const levels: CircuitLevel[] = [
         id:          'level_1',
         name:        'Light the Bulb',
         description: 'Place a Battery and a Bulb, then connect them with Wires to complete the loop.',
-        rows: 6, cols: 9,
+        rows: 4, cols: 6,
         available: ['battery', 'wire', 'light', 'empty'],
     },
     {
         id:          'level_2',
         name:        'Switch Control',
         description: 'Add a Switch to the path. Click the switch to toggle the bulb on and off.',
-        rows: 6, cols: 9,
+        rows: 4, cols: 6,
         available: ['battery', 'wire', 'switch', 'light', 'empty'],
     },
     {
         id:          'level_3',
         name:        'Two Bulbs',
         description: 'Light both bulbs. You can wire them in series or build parallel branches.',
-        rows: 8, cols: 9,
+        rows: 4, cols: 6,
         available: ['battery', 'wire', 'switch', 'light', 'resistor', 'empty'],
     },
 ];
@@ -58,7 +59,8 @@ export const levels: CircuitLevel[] = [
 function emptyGrid(rows: number, cols: number): Cell[][] {
     return Array.from({ length: rows }, () =>
         Array.from({ length: cols }, (): Cell => ({
-            type: 'empty', switchClosed: false, energized: false, lit: false,
+            type: 'empty', switchClosed: false,
+            energized: false, lit: false, shortPath: false,
         }))
     );
 }
@@ -84,16 +86,13 @@ function inBounds(grid: Cell[][], r: number, c: number): boolean {
     return r >= 0 && r < grid.length && c >= 0 && c < (grid[0]?.length ?? 0);
 }
 
-// Full conductance: non-empty, and if switch then closed
 function conducts(cell: Cell): boolean {
     if (cell.type === 'empty')  return false;
     if (cell.type === 'switch') return cell.switchClosed;
     return true;
 }
 
-// Short-circuit conductance: same as full but loads (lights/resistors) are
-// treated as insulators.  A battery in a cycle under this rule means there is
-// a load-free path back to it — i.e. a short circuit.
+// Treats lights/resistors as open so we can find load-free cycles (shorts).
 function conductsNoLoad(cell: Cell): boolean {
     if (cell.type === 'light' || cell.type === 'resistor') return false;
     return conducts(cell);
@@ -106,16 +105,11 @@ function openCircuitHint(grid: Cell[][]): string {
 }
 
 // ── 2-core decomposition ──────────────────────────────────────────────────────
-//
-// Returns a `removed[r][c]` boolean grid.
-// Iteratively strips cells whose degree (under the given conductance function)
-// falls below 2.  Survivors all lie on at least one simple cycle.
-// This is the standard "2-core" or "k-core with k=2" of the graph.
+// Iteratively removes cells whose degree in the given conductance graph is < 2.
+// Survivors all lie on at least one simple cycle (the "2-core").
 
 function twoCore(
-    grid: Cell[][],
-    rows: number,
-    cols: number,
+    grid: Cell[][], rows: number, cols: number,
     conductFn: (cell: Cell) => boolean,
 ): boolean[][] {
     const deg     = Array.from({length: rows}, () => new Array<number>(cols).fill(0));
@@ -146,24 +140,117 @@ function twoCore(
             if (--deg[nr][nc] < 2) q.push([nr, nc]);
         }
     }
-
     return removed;
+}
+
+// ── Short-circuit path finder ─────────────────────────────────────────────────
+//
+// Finds the shortest load-free cycle through the given battery in the
+// load-free 2-core (shortRemoved already computed).
+//
+// Strategy: BFS from the battery, tagging each reachable cell with which
+// "exit" of the battery its subtree originated from.  The moment two cells
+// from DIFFERENT exits become adjacent, we have found two vertex-disjoint
+// paths from the battery that join up — i.e. a cycle through the battery.
+// We reconstruct both paths using parent pointers and return all cells.
+
+function findBatteryCycle(
+    grid: Cell[][],
+    shortRemoved: boolean[][], br: number, bc: number,
+): [number, number][] {
+    const mk = (r: number, c: number) => `${r},${c}`;
+    const batKey = mk(br, bc);
+
+    type Info = { tag: number; dist: number; pr: number; pc: number };
+    const info = new Map<string, Info>();
+    info.set(batKey, { tag: -1, dist: 0, pr: -1, pc: -1 });
+
+    const q: [number, number][] = [];
+    let tagCount = 0;
+
+    for (const [dr, dc] of DIRS) {
+        const nr = br+dr, nc = bc+dc;
+        if (!inBounds(grid, nr, nc) || shortRemoved[nr][nc]) continue;
+        if (!conductsNoLoad(grid[nr][nc])) continue;
+        const k = mk(nr, nc);
+        if (!info.has(k)) {
+            info.set(k, { tag: tagCount++, dist: 1, pr: br, pc: bc });
+            q.push([nr, nc]);
+        }
+    }
+
+    let foundU: [number, number] | null = null;
+    let foundV: [number, number] | null = null;
+
+    let qHead = 0;
+    outer:
+    while (qHead < q.length) {
+        const [r, c] = q[qHead++];
+        const curInfo = info.get(mk(r, c))!;
+
+        for (const [dr, dc] of DIRS) {
+            const nr = r+dr, nc = c+dc;
+
+            // Back-edge directly to battery (non-trivial cycle)
+            if (nr === br && nc === bc) {
+                if (curInfo.dist >= 2) {
+                    foundU = [r, c];
+                    foundV = [br, bc];
+                    break outer;
+                }
+                continue;
+            }
+
+            if (!inBounds(grid, nr, nc) || shortRemoved[nr][nc]) continue;
+            if (!conductsNoLoad(grid[nr][nc])) continue;
+            const nk = mk(nr, nc);
+
+            if (info.has(nk)) {
+                const nInfo = info.get(nk)!;
+                // Cross-edge connecting two different exit subtrees — cycle found
+                if (nInfo.tag !== curInfo.tag && nInfo.tag !== -1) {
+                    foundU = [r, c];
+                    foundV = [nr, nc];
+                    break outer;
+                }
+            } else {
+                info.set(nk, { tag: curInfo.tag, dist: curInfo.dist + 1, pr: r, pc: c });
+                q.push([nr, nc]);
+            }
+        }
+    }
+
+    if (!foundU) return [];
+
+    // Reconstruct by tracing each endpoint back to the battery via parents
+    const result: [number, number][] = [];
+    const seen = new Set<string>();
+
+    function tracePath(r: number, c: number): void {
+        const k = mk(r, c);
+        if (seen.has(k)) return;
+        seen.add(k);
+        result.push([r, c]);
+        const inf = info.get(k);
+        if (inf && inf.pr >= 0) tracePath(inf.pr, inf.pc);
+    }
+
+    tracePath(foundU[0], foundU[1]);
+    tracePath(foundV![0], foundV![1]);
+
+    return result;
 }
 
 // ── Circuit Solver ────────────────────────────────────────────────────────────
 //
 // Phase 1 — Short-circuit detection:
-//   Run 2-core with loads (lights/resistors) treated as open.  If any battery
-//   survives, there is a cycle that bypasses all loads entirely — a true short
-//   circuit.  Current always takes the path of least resistance, so even one
-//   load-free path shorts the entire loop regardless of other paths with bulbs.
+//   Run 2-core treating loads as open (conductsNoLoad).  If any battery
+//   survives, there is a load-free cycle → short circuit.  Find and highlight
+//   the shortest such cycle through the battery so the player can see it.
 //
 // Phase 2 — Valid-circuit detection:
-//   Run 2-core with full conductance.  Every battery that survives is on a
-//   cycle that necessarily goes through at least one load (Phase 1 passed).
-//   BFS within cycle cells from each battery to find its component; energise
-//   all cells in it.  Multiple batteries in separate components are each
-//   handled independently.
+//   Run 2-core with full conductance.  BFS from each cycle battery energises
+//   its connected component.  Multiple batteries handled independently.
 
 function solveCircuit(): void {
     const grid    = gameState.grid;
@@ -172,7 +259,11 @@ function solveCircuit(): void {
     const cols    = grid[0]?.length ?? 0;
 
     for (const row of grid)
-        for (const cell of row) { cell.energized = false; cell.lit = false; }
+        for (const cell of row) {
+            cell.energized = false;
+            cell.lit       = false;
+            cell.shortPath = false;
+        }
 
     let hasBattery = false;
     for (const row of grid)
@@ -190,6 +281,8 @@ function solveCircuit(): void {
         for (let r = 0; r < rows; r++)
             for (let c = 0; c < cols; c++)
                 if (grid[r][c].type === 'battery' && !shortRemoved[r][c]) {
+                    const path = findBatteryCycle(grid, shortRemoved, r, c);
+                    for (const [pr, pc] of path) grid[pr][pc].shortPath = true;
                     _commit(false, true,
                         'Short circuit! Every path from the battery needs a Bulb or Resistor.');
                     return;
@@ -210,7 +303,6 @@ function solveCircuit(): void {
         return;
     }
 
-    // BFS from each cycle battery to find connected cycle components
     const coveredBats = new Set<string>();
     let anySolved = false;
 
@@ -283,6 +375,7 @@ export function placeCell(r: number, c: number, type: ComponentType): void {
     cell.switchClosed = false;
     cell.energized    = false;
     cell.lit          = false;
+    cell.shortPath    = false;
     solveCircuit();
 }
 

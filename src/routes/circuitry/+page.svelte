@@ -61,11 +61,14 @@
         flex: 1 1 0;
         min-height: 0;
         width: 100%;
-        background: #090e18;
-        position: relative;   /* GoalBanner uses position:absolute */
+        background: #07111f;
+        position: relative;
         overflow: hidden;
+        /* Centre the board; container-type exposes cqw/cqh to CircuitryBoard */
         display: flex;
-        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        container-type: size;
     }
 
     /* Controls bar never shrinks — always visible */

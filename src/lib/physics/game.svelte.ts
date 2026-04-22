@@ -6,13 +6,14 @@ import {
     createBounds,
     createBallAndCage,
     createGoal,
+    createGeometry,
     cageWalls,
     spawnPrefab
 } from "./level-creation";
 
 import { levels, type PrefabType } from "./level-data";
 
-const { Engine, World, Render, Runner, Bodies, Events, Body, Query } = Matter;
+const { Engine, World, Render, Runner, Events, Body, Query } = Matter;
 
 const SEESAW_MAX_ANGLE = (40 * Math.PI) / 180;
 
@@ -24,23 +25,12 @@ let runner: Matter.Runner;
 let ball: Matter.Body;
 let goal: Matter.Body;
 
-let drawnLines: {
-    x1: number;
-    y1: number;
-    x2: number;
-    y2: number;
-}[] = [];
-
 let placedPrefabs: { type: PrefabType; body: Matter.Body | Matter.Body[] }[] = [];
-let drawnLineBodies: Matter.Body[] = [];
 let seesawBeams: Matter.Body[] = [];
 
 let overlayCanvas: HTMLCanvasElement;
 let overlayCtx: CanvasRenderingContext2D;
 
-let drawing = false;
-let currentLine: { x1: number; y1: number; x2: number; y2: number } | null = null;
-let mouseDownPos: { x: number; y: number } | null = null;
 let ghostPos: { x: number; y: number } | null = null;
 
 let container: HTMLElement;
@@ -87,6 +77,7 @@ function init() {
     const level = levels[physicsGameState.currentLevelIndex];
     ball = createBallAndCage(world, level);
     goal = createGoal(world, level);
+    createGeometry(world, level);
 
     physicsGameState.inventory = level.prefabs.map(p => ({ ...p }));
     physicsGameState.activePrefab = null;
@@ -95,7 +86,7 @@ function init() {
     seesawBeams = [];
 
     Events.on(engine, "afterUpdate", () => {
-        redrawLines();
+        redrawOverlay();
         clampSeesaws();
     });
 
@@ -131,7 +122,6 @@ function init() {
     updateAIContext();
 }
 
-// SEESAW ANGLE CLAMP
 function clampSeesaws() {
     for (const beam of seesawBeams) {
         if (beam.angle > SEESAW_MAX_ANGLE) {
@@ -159,107 +149,23 @@ function setupOverlay(w: number, h: number) {
     if (!ctx) throw new Error("Could not get 2D context");
     overlayCtx = ctx;
 
-    if (physicsGameState.currentLevelIndex === 3) {
-        overlayCanvas.addEventListener("mousedown", startDrawing);
-        overlayCanvas.addEventListener("mousemove", onMouseMove);
-        overlayCanvas.addEventListener("mouseup", stopDrawing);
-        overlayCanvas.addEventListener("mouseleave", onMouseLeave);
-    }
+    overlayCanvas.addEventListener("mouseleave", () => { ghostPos = null; });
     overlayCanvas.addEventListener("click", onCanvasClick);
     overlayCanvas.addEventListener("dragover", onDragOver);
     overlayCanvas.addEventListener("drop", onDrop);
     overlayCanvas.addEventListener("dragleave", onDragLeave);
 }
 
-function startDrawing(e: MouseEvent) {
-    if (physicsGameState.activePrefab || physicsGameState.currentLevelIndex >= levels.length) return;
-    mouseDownPos = { x: e.offsetX, y: e.offsetY };
-    drawing = true;
-    currentLine = { x1: e.offsetX, y1: e.offsetY, x2: e.offsetX, y2: e.offsetY };
-}
-
-function onMouseMove(e: MouseEvent) {
-    if (drawing && currentLine) {
-        currentLine.x2 = e.offsetX;
-        currentLine.y2 = e.offsetY;
-    }
-}
-
-function onMouseLeave() {
-    ghostPos = null;
-    stopDrawing();
-}
-
-function stopDrawing() {
-    if (!drawing || !currentLine) return;
-    drawing = false;
-
-    const dx = currentLine.x2 - currentLine.x1;
-    const dy = currentLine.y2 - currentLine.y1;
-    const dist = Math.hypot(dx, dy);
-
-    if (dist < 8) {
-        const cx = mouseDownPos!.x;
-        const cy = mouseDownPos!.y;
-        currentLine = null;
-        mouseDownPos = null;
-        tryRotateAt(cx, cy);
-        return;
-    }
-
-    drawnLines.push(currentLine);
-
-    const midX = (currentLine.x1 + currentLine.x2) / 2;
-    const midY = (currentLine.y1 + currentLine.y2) / 2;
-    const len = dist;
-    const angle = Math.atan2(dy, dx);
-
-    const body = Bodies.rectangle(midX, midY, len, 6, {
-        isStatic: true,
-        angle,
-        render: { visible: false }
-    });
-
-    World.add(world, body);
-    drawnLineBodies.push(body);
-    currentLine = null;
-    mouseDownPos = null;
-
-    updateAIContext();
-}
-
 // Seesaw beams are excluded from rotation — they rotate via physics only.
 function tryRotateAt(x: number, y: number) {
-    const point = { x, y };
+    const rotatableBodies = placedPrefabs
+        .flatMap(p => Array.isArray(p.body) ? p.body : [p.body])
+        .filter(b => b.label !== 'prefab:seesaw:beam' && b.label !== 'prefab:seesaw:cup');
 
-    const rotatableBodies = [
-        ...placedPrefabs
-            .flatMap(p => Array.isArray(p.body) ? p.body : [p.body])
-            .filter(b => b.label !== 'prefab:seesaw:beam' && b.label !== 'prefab:seesaw:cup'),
-        ...drawnLineBodies
-    ];
-
-    const hits = Query.point(rotatableBodies, point);
+    const hits = Query.point(rotatableBodies, { x, y });
     if (hits.length === 0) return;
 
-    const target = hits[hits.length - 1];
-    Body.setAngle(target, target.angle + Math.PI / 2);
-
-    const lineIdx = drawnLineBodies.indexOf(target);
-    if (lineIdx !== -1) {
-        const line = drawnLines[lineIdx];
-        const midX = target.position.x;
-        const midY = target.position.y;
-        const halfLen = Math.hypot(line.x2 - line.x1, line.y2 - line.y1) / 2;
-        const newAngle = target.angle;
-        drawnLines[lineIdx] = {
-            x1: midX - Math.cos(newAngle) * halfLen,
-            y1: midY - Math.sin(newAngle) * halfLen,
-            x2: midX + Math.cos(newAngle) * halfLen,
-            y2: midY + Math.sin(newAngle) * halfLen,
-        };
-    }
-
+    Body.setAngle(hits[hits.length - 1], hits[hits.length - 1].angle + Math.PI / 2);
     updateAIContext();
 }
 
@@ -297,7 +203,6 @@ function onDrop(e: DragEvent) {
     const body = spawnPrefab(world, type, x, y);
     placedPrefabs.push({ type, body });
 
-    // Register seesaw beam (index 0) for angle clamping
     if (type === 'seesaw' && Array.isArray(body)) {
         seesawBeams.push(body[0]);
     }
@@ -309,23 +214,8 @@ function onDrop(e: DragEvent) {
     updateAIContext();
 }
 
-function redrawLines() {
+function redrawOverlay() {
     overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-
-    overlayCtx.strokeStyle = "#66ccff";
-    overlayCtx.lineWidth = 4;
-    overlayCtx.shadowColor = "#66ccff";
-    overlayCtx.shadowBlur = 14;
-
-    [...drawnLines, currentLine].forEach((l) => {
-        if (!l) return;
-        overlayCtx.beginPath();
-        overlayCtx.moveTo(l.x1, l.y1);
-        overlayCtx.lineTo(l.x2, l.y2);
-        overlayCtx.stroke();
-    });
-
-    overlayCtx.shadowBlur = 0;
 
     if (ghostPos && physicsGameState.activePrefab) {
         drawGhost(physicsGameState.activePrefab, ghostPos.x, ghostPos.y);
@@ -358,7 +248,6 @@ function drawGhost(type: PrefabType, x: number, y: number) {
             overlayCtx.fill();
             break;
         case 'seesaw':
-            // Triangle base
             overlayCtx.fillStyle = '#889966';
             overlayCtx.beginPath();
             overlayCtx.moveTo(0, 36);
@@ -366,7 +255,6 @@ function drawGhost(type: PrefabType, x: number, y: number) {
             overlayCtx.lineTo(12, 0);
             overlayCtx.closePath();
             overlayCtx.fill();
-            // Beam
             overlayCtx.fillStyle = '#c8a06a';
             overlayCtx.fillRect(-110, -6, 220, 12);
             break;
@@ -418,8 +306,6 @@ function resetWorld() {
     Engine.clear(engine);
 
     container.innerHTML = "";
-    drawnLines = [];
-    drawnLineBodies = [];
     placedPrefabs = [];
     seesawBeams = [];
     ghostPos = null;
@@ -450,10 +336,10 @@ function updateAIContext() {
 }
 
 export function buildPhysicsContext() {
+    const level = levels[physicsGameState.currentLevelIndex];
     return {
         ball: ball.position,
         goal: goal.position,
-        lines: drawnLines,
         placedPrefabs: placedPrefabs.map(p => ({
             type: p.type,
             position: Array.isArray(p.body)
@@ -461,5 +347,6 @@ export function buildPhysicsContext() {
                 : (p.body as Matter.Body).position
         })),
         inventory: physicsGameState.inventory.map(i => ({ type: i.type, remaining: i.count })),
+        solution: level.solution ?? '',
     };
 }
