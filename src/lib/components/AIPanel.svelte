@@ -1,14 +1,15 @@
 <script lang="ts">
 	import { askAI } from '$lib/game-ui.svelte';
-	import { uiState } from '$lib/game-ui.svelte';
+	import { uiState, physicsGameState } from '$lib/game-ui.svelte';
 	import { buildPhysicsContext } from '$lib/physics/game.svelte';
-	import { buildChemistryContext } from '$lib/chemistry/game.svelte';
-	import { buildCircuitryContext } from '$lib/circuitry/game.svelte';
+	import { levels as physicsLevels } from '$lib/physics/level-data';
+	import { buildChemistryContext, gameState as chemState, levels as chemLevels } from '$lib/chemistry/game.svelte';
+	import { buildCircuitryContext, gameState as circuitState, levels as circuitLevels } from '$lib/circuitry/game.svelte';
 
 	let isThinking = $state(false);
 	let hasAsked = $state(false);
 
-	/* Preset questions */
+	/* ── Beginner preset questions (hardcoded, shown before first interaction) ── */
 	const presetData: Record<string, { question: string; answer: string }[]> = {
 		physics: [
 			{
@@ -62,6 +63,140 @@
 		return presetData[uiState.gameType] ?? presetData.physics;
 	}
 
+	/* ── Dynamic context-aware questions (generated from live game state) ── */
+
+	function getDynamicQuestions(): string[] {
+		switch (uiState.gameType) {
+			case 'physics':
+				return getPhysicsDynamic();
+			case 'chemistry':
+				return getChemistryDynamic();
+			case 'circuitry':
+				return getCircuitryDynamic();
+			default:
+				return [];
+		}
+	}
+
+	function getPhysicsDynamic(): string[] {
+		const questions: string[] = [];
+		const level = physicsLevels[physicsGameState.currentLevelIndex];
+		const inv = physicsGameState.inventory;
+
+		// Items remaining — ask about what they can do
+		const remaining = inv.filter(i => i.count > 0);
+		if (remaining.length > 0) {
+			const names = remaining.map(i => i.type).join(' and ');
+			questions.push(`What should I do with my ${names}?`);
+		}
+
+		// All items placed — ask what to try next
+		if (remaining.length === 0) {
+			questions.push('I placed everything — what should I try now?');
+		}
+
+		// Level-specific curiosity
+		const prefabTypes = level.prefabs.map(p => p.type);
+		if (prefabTypes.includes('bouncepad')) {
+			questions.push('How does the bounce pad work?');
+		}
+		if (prefabTypes.includes('seesaw')) {
+			questions.push('How does the seesaw launch the ball?');
+		}
+		if (prefabTypes.includes('ramp')) {
+			questions.push('How do ramps change the ball\'s direction?');
+		}
+
+		// Ask about goal if stuck
+		if (!uiState.goalReached) {
+			questions.push('Can you give me a hint?');
+		} else {
+			questions.push('Why did that solution work?');
+		}
+
+		return questions.slice(0, 3);
+	}
+
+	function getChemistryDynamic(): string[] {
+		const questions: string[] = [];
+		const level = chemLevels[chemState.currentLevelIndex];
+		const slots = chemState.selectedSlots;
+		const result = chemState.lastResult;
+
+		// Has elements selected but hasn't reacted yet
+		if (slots.length > 0 && !result) {
+			const elNames = slots.map(s => s.element.name).join(' and ');
+			questions.push(`What happens when I mix ${elNames}?`);
+		}
+
+		// Reacted but didn't hit the goal
+		if (result && !chemState.goalReached && level.targetFormula) {
+			questions.push(`I made ${result.commonName} — how is that different from the goal?`);
+			questions.push(`What elements do I need for ${level.targetFormula}?`);
+		}
+
+		// Reacted and hit the goal
+		if (result && chemState.goalReached) {
+			questions.push(`Why do these elements make ${result.commonName}?`);
+			questions.push(`What is ${result.commonName} used for in real life?`);
+		}
+
+		// No elements selected yet
+		if (slots.length === 0 && !result) {
+			if (level.targetFormula) {
+				questions.push(`How do I make ${level.targetFormula}?`);
+			}
+			questions.push('Which elements should I start with?');
+		}
+
+		// Sandbox mode
+		if (level.sandboxMode) {
+			questions.push('What\'s a cool reaction I should try?');
+		}
+
+		return questions.slice(0, 3);
+	}
+
+	function getCircuitryDynamic(): string[] {
+		const questions: string[] = [];
+		const level = circuitLevels[circuitState.levelIndex];
+
+		// Short circuit detected
+		if (circuitState.shortCircuit) {
+			questions.push('Why is my circuit short-circuiting?');
+			questions.push('How do I fix a short circuit?');
+		}
+
+		// Some bulbs lit but not all
+		if (circuitState.activeLights > 0 && circuitState.activeLights < circuitState.totalLights) {
+			questions.push(`Only ${circuitState.activeLights} of ${circuitState.totalLights} bulbs are lit — why?`);
+			questions.push('How do I light up all the bulbs?');
+		}
+
+		// No bulbs lit yet
+		if (circuitState.totalLights > 0 && circuitState.activeLights === 0 && !circuitState.shortCircuit) {
+			questions.push('Why aren\'t my bulbs lighting up?');
+			questions.push('Can you give me a hint for this level?');
+		}
+
+		// Solved!
+		if (circuitState.solved && circuitState.activeLights === circuitState.totalLights) {
+			questions.push('Why does this circuit work?');
+		}
+
+		// Level-specific questions based on available components
+		if (level.available.includes('switch')) {
+			questions.push('What does a switch do in a circuit?');
+		}
+		if (level.available.includes('resistor') && !circuitState.solved) {
+			questions.push('When should I use a resistor?');
+		}
+
+		return questions.slice(0, 3);
+	}
+
+	/* ── Handlers ── */
+
 	async function handleAskAI() {
 		if (!uiState.aiPrompt.trim() || isThinking) return;
 
@@ -80,6 +215,12 @@
 	function handlePresetClick(preset: { question: string; answer: string }) {
 		hasAsked = true;
 		uiState.aiResponse = preset.answer;
+	}
+
+	async function handleDynamicClick(question: string) {
+		if (isThinking) return;
+		uiState.aiPrompt = question;
+		await handleAskAI();
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
@@ -130,6 +271,21 @@
 			<div class="speech-bubble">
 				<p class="response-text">{uiState.aiResponse}</p>
 			</div>
+
+			<!-- Dynamic context-aware follow-up questions -->
+			{#if getDynamicQuestions().length > 0}
+				<div class="dynamic-questions">
+					{#each getDynamicQuestions() as question}
+						<button
+							class="preset-btn dynamic-btn"
+							onclick={() => handleDynamicClick(question)}
+							disabled={isThinking}
+						>
+							💡 {question}
+						</button>
+					{/each}
+				</div>
+			{/if}
 		{:else}
 			<div class="speech-bubble greeting">
 				<p class="response-text">
@@ -138,7 +294,7 @@
 				</p>
 			</div>
 
-			<!-- Preset Questions -->
+			<!-- Beginner preset questions -->
 			{#if !hasAsked}
 				<div class="preset-questions">
 					{#each getPresets() as preset}
@@ -463,6 +619,27 @@
 	.preset-btn:disabled {
 		opacity: 0.35;
 		cursor: not-allowed;
+	}
+
+	/* ── Dynamic follow-up questions ── */
+	.dynamic-questions {
+		display: flex;
+		flex-direction: column;
+		gap: 5px;
+		padding: 8px 0 2px;
+		flex-shrink: 0;
+		animation: presets-in 0.35s ease-out;
+	}
+
+	.dynamic-btn {
+		border-color: #1e3a4a !important;
+		background: rgba(255, 213, 79, 0.03) !important;
+	}
+
+	.dynamic-btn:hover:not(:disabled) {
+		border-color: #ffd54f !important;
+		color: #ffd54f !important;
+		background: rgba(255, 213, 79, 0.08) !important;
 	}
 
 	@keyframes presets-in {
