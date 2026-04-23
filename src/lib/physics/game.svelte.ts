@@ -38,8 +38,10 @@ let sandboxDragTarget: 'ball' | 'goal' | null = null;
 let sandboxDragOffset = { x: 0, y: 0 };
 let prefabDragEntry: typeof placedPrefabs[0] | null = null;
 let prefabDragOffset = { x: 0, y: 0 };
+let prefabDragStartMouse = { x: 0, y: 0 };
 let prefabDragMoved = false;
 let skipNextClick = false;
+let goalTriggered = false;
 
 const SANDBOX_CONFIG: LevelConfig = {
     ball: { x: 350, y: 60 },
@@ -127,10 +129,11 @@ function init() {
     Events.on(engine, "collisionStart", (event) => {
         event.pairs.forEach(({ bodyA, bodyB }) => {
             const isScoring = (b: Matter.Body) => b === ball || b.label === 'prefab:seesaw:ball';
-            if (goal && (
+            if (!goalTriggered && goal && (
                 (isScoring(bodyA) && bodyB === goal) ||
                 (isScoring(bodyB) && bodyA === goal)
             )) {
+                goalTriggered = true;
                 if (onGoalReached) onGoalReached();
             }
 
@@ -299,6 +302,7 @@ function onCanvasMouseDown(e: MouseEvent) {
                 const primary = (Array.isArray(entry.body) ? entry.body[0] : entry.body) as Matter.Body;
                 prefabDragEntry = entry;
                 prefabDragOffset = { x: e.offsetX - primary.position.x, y: e.offsetY - primary.position.y };
+                prefabDragStartMouse = { x: e.offsetX, y: e.offsetY };
                 prefabDragMoved = false;
                 e.preventDefault();
             }
@@ -331,7 +335,9 @@ function onCanvasMouseMove(e: MouseEvent) {
         const ty = e.offsetY - prefabDragOffset.y;
         const dx = tx - primary.position.x;
         const dy = ty - primary.position.y;
-        if (Math.hypot(dx, dy) > 2) prefabDragMoved = true;
+        if (!prefabDragMoved && Math.hypot(e.offsetX - prefabDragStartMouse.x, e.offsetY - prefabDragStartMouse.y) > 5) {
+            prefabDragMoved = true;
+        }
         movePrefabEntry(prefabDragEntry, dx, dy);
         return;
     }
@@ -551,7 +557,7 @@ function drawGhost(type: PrefabType, x: number, y: number) {
         case 'bumper':
             overlayCtx.fillStyle = '#8844ff';
             overlayCtx.beginPath();
-            overlayCtx.arc(0, 0, 20, 0, Math.PI * 2);
+            overlayCtx.arc(0, 0, 60, 0, Math.PI * 2);
             overlayCtx.fill();
             break;
         case 'seesaw': {
@@ -654,6 +660,7 @@ export function resetBall() {
     const config = sandboxConfig ?? levels[physicsGameState.currentLevelIndex];
     ball = createBallAndCage(world, config);
     seesawLaunched = false;
+    goalTriggered = false;
     physicsGameState.cageReleased = false;
     updateAIContext();
 }
@@ -677,6 +684,7 @@ function resetWorld() {
     sandboxDragTarget = null;
     prefabDragEntry = null;
     prefabDragMoved = false;
+    goalTriggered = false;
     physicsGameState.cageReleased = false;
 
     init();

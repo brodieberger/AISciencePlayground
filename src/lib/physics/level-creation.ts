@@ -150,7 +150,7 @@ function spawnBouncePad(world: Matter.World, x: number, y: number): Matter.Body 
 
 // A circular bumper that deflects the ball
 function spawnBumper(world: Matter.World, x: number, y: number): Matter.Body {
-    const body = Bodies.circle(x, y, 20, {
+    const body = Bodies.circle(x, y, 60, {
         isStatic: true,
         label: 'prefab:bumper',
         restitution: 1.8,
