@@ -114,7 +114,8 @@ Currently selected elements: {selected_elements}
 Last reaction result: {last_result}
 Goal reached: {goal_reached}
 
-Explain briefly using simple words a child could understand. No more than three sentences.
+REQUIRED: Explain briefly using simple words a child could understand. 
+REQUIRED: No more than three sentences.
 Your goal is to foster scientific inquiry using the Socratic method. Never give the direct answer.
 Focus on which elements to combine to reach the target formula.
 """
