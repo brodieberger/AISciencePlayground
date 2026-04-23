@@ -66,15 +66,15 @@ export const levels: LevelConfig[] = [
         ball: { x: 150, y: 80 },
         goal: { x: 590, y: 430 },
         prefabs: [
-            { type: 'bridge', count: 2 },
-            { type: 'bumper', count: 2 },
+            { type: 'bridge', count: 3 },
+            { type: 'bouncepad', count: 2 },
         ],
         geometry: [
             { type: 'rect', x: 295, y: 230, w: 14, h: 260 },
             { type: 'rect', x: 465, y: 330, w: 14, h: 220 },
             { type: 'rect', x: 520, y: 460, w: 200, h: 14 },
         ],
-        solution: 'Two walls block the straight path to the goal. Place a bridge to the left of the first wall and rotate it to an angle to deflect the falling ball sideways past the wall. Use bumpers near the second wall to redirect the ball. Place the second bridge angled to guide the ball down onto the platform where the goal sits.',
+        solution: 'Two walls block the straight path to the goal. Place a bridge to the left of the first wall and rotate it to an angle to deflect the falling ball sideways past the wall. Use bounce pads near the second wall to redirect the ball. Place the second bridge angled to guide the ball down onto the platform where the goal sits.',
     },
 
     // Level 3 — The Channel
@@ -101,13 +101,15 @@ export const levels: LevelConfig[] = [
     // one cup, tipping the beam and launching the seesaw's own ball toward the goal.
     {
         ball: { x: 300, y: 80 },
-        goal: { x: 520, y: 420 },
+        goal: { x: 690, y: 440 },
         prefabs: [
             { type: 'seesaw', count: 1 },
         ],
         geometry: [
-            { type: 'rect', x: 540, y: 310, w: 200, h: 14 },
-            { type: 'rect', x: 390, y: 490, w: 260, h: 14 },
+            { type: 'rect', x: 540, y: 200, w: 14, h: 300 },
+            { type: 'rect', x: 540, y: 600, w: 14, h: 300 },
+            { type: 'rect', x: 639, y: 457, w: 180, h: 14 },
+            { type: 'rect', x: 290, y: 600, w: 480, h: 14 },
         ],
         solution: 'Place the seesaw in the open area so its right cup is under the ball\'s drop path. When you release the ball it falls onto the right cup, tipping the beam and launching the yellow ball out of the left cup. The launched ball will arc over the shelf and land on the goal.',
     },
