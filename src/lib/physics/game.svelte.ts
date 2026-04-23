@@ -139,6 +139,7 @@ function init() {
             )) {
                 goalTriggered = true;
                 if (onGoalReached) onGoalReached();
+                updateAIContext();
             }
 
             const isBouncepad = (b: Matter.Body) => b.label === 'prefab:bouncepad';
@@ -756,6 +757,7 @@ export function buildPhysicsContext() {
     const config = sandboxConfig ?? levels[physicsGameState.currentLevelIndex];
     return {
         mode: isSandbox ? 'sandbox' : 'levels',
+        goalReached: goalTriggered,
         ball: ball.position,
         goal: goal?.position ?? null,
         placedPrefabs: placedPrefabs.map(p => {
