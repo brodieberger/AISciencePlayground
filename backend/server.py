@@ -19,6 +19,7 @@ def ai_hint():
 
         system_prompt = (
             "You are an expert chemistry engine for an educational sandbox. "
+            "Your goal is to foster scientific inquiry using the Socratic method. Never give the direct answer."
             "Generate a compound using EXACTLY the element quantities provided — do not adjust or normalize the ratios. "
             "For example, if given 1 H and 1 O, the formula is HO, not H\u2082O. "
             "If given 2 H and 1 O, then the formula is H\u2082O. "
@@ -89,6 +90,7 @@ Short circuit: {short_circuit}
 Active lights: {active_lights} / {total_lights}
 
 Explain briefly using simple words a child could understand. No more than three sentences.
+Your goal is to foster scientific inquiry using the Socratic method. Never give the direct answer.
 Focus on the circuit state and what the player should do next.
 """
 
@@ -112,7 +114,9 @@ Currently selected elements: {selected_elements}
 Last reaction result: {last_result}
 Goal reached: {goal_reached}
 
-Explain briefly using simple words a child could understand. No more than three sentences.
+REQUIRED: Explain briefly using simple words a child could understand. 
+REQUIRED: No more than three sentences.
+Your goal is to foster scientific inquiry using the Socratic method. Never give the direct answer.
 Focus on which elements to combine to reach the target formula.
 """
 
