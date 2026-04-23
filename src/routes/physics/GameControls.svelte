@@ -50,27 +50,27 @@
 
 	{#if physicsGameState.inventory.length > 0}
 		<div class="inventory">
-			<span class="inventory-label">Inventory — drag onto the field</span>
+			<span class="inventory-label">Toolbox</span>
 			<div class="inventory-items">
 				{#each physicsGameState.inventory as slot}
-					{#if slot.count > 0}
-						<div
-							class="prefab-chip"
-							class:active={physicsGameState.activePrefab === slot.type}
-							draggable="true"
-							role="button"
-							tabindex="0"
-							ondragstart={() => onDragStart(slot.type)}
-							ondragend={onDragEnd}
-							onclick={() => selectPrefab(slot.type)}
-							onkeydown={(e) => e.key === 'Enter' && selectPrefab(slot.type)}
-						>
-							{prefabLabels[slot.type as PrefabType]}
-							<span class="count">x{slot.count}</span>
-						</div>
-					{/if}
+					<div
+						class="prefab-chip"
+						class:active={physicsGameState.activePrefab === slot.type}
+						class:exhausted={slot.count === 0}
+						draggable={slot.count > 0}
+						role="button"
+						tabindex={slot.count > 0 ? 0 : -1}
+						ondragstart={() => slot.count > 0 && onDragStart(slot.type)}
+						ondragend={onDragEnd}
+						onclick={() => slot.count > 0 && selectPrefab(slot.type)}
+						onkeydown={(e) => e.key === 'Enter' && slot.count > 0 && selectPrefab(slot.type)}
+					>
+						{prefabLabels[slot.type as PrefabType]}
+						<span class="count">{slot.count > 0 ? `x${slot.count}` : '✕'}</span>
+					</div>
 				{/each}
 			</div>
+			<span class="hint">Click placed item to rotate · Right-click to remove · Ctrl+Z to undo</span>
 		</div>
 	{/if}
 </div>
@@ -143,7 +143,7 @@ button {
 	transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.prefab-chip:hover {
+.prefab-chip:hover:not(.exhausted) {
 	border-color: #66ccff;
 	box-shadow: 0 0 8px #66ccff55;
 }
@@ -154,8 +154,20 @@ button {
 	background: #1e3050;
 }
 
+.prefab-chip.exhausted {
+	opacity: 0.35;
+	cursor: default;
+	border-color: #223;
+}
+
 .count {
 	font-size: 0.75rem;
 	color: #88aacc;
+}
+
+.hint {
+	font-size: 0.65rem;
+	color: #445566;
+	letter-spacing: 0.03em;
 }
 </style>

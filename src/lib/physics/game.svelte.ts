@@ -321,9 +321,17 @@ function redrawOverlay() {
     }
 }
 
+const GHOST_LABELS: Record<PrefabType, string> = {
+    bridge: 'Bridge',
+    bouncepad: 'Bounce Pad',
+    ramp: 'Ramp',
+    bumper: 'Bumper',
+    seesaw: 'Seesaw',
+};
+
 function drawGhost(type: PrefabType, x: number, y: number) {
     overlayCtx.save();
-    overlayCtx.globalAlpha = 0.45;
+    overlayCtx.globalAlpha = 0.5;
     overlayCtx.translate(x, y);
 
     switch (type) {
