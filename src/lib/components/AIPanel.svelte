@@ -29,7 +29,7 @@
 		chemistry: [
 			{
 				question: 'What is my goal?',
-				answer: 'Combine the right elements to create the target compound shown above!'
+				answer: 'Combine the right elements to create the target compound shown below!'
 			},
 			{
 				question: 'How do I play?',
