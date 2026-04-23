@@ -221,7 +221,11 @@ let _onGoal: (() => void) | undefined;
 
 export function startGame(_container: HTMLElement, opts?: { onGoal?: () => void }) {
     _onGoal = opts?.onGoal;
-    loadLevel(gameState.currentLevelIndex);
+    gameState.currentLevelIndex = 0;
+    uiState.goalReached = false;
+    uiState.aiPrompt = '';
+    uiState.aiResponse = '';
+    loadLevel(0);
     updateAIContext();
 }
 

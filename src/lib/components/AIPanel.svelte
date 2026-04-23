@@ -8,6 +8,7 @@
 
 	let isThinking = $state(false);
 	let hasAsked = $state(false);
+	let lastSentMessage = $state('');
 
 	/* ── Beginner preset questions (hardcoded, shown before first interaction) ── */
 	const presetData: Record<string, { question: string; answer: string }[]> = {
@@ -201,6 +202,7 @@
 		if (!uiState.aiPrompt.trim() || isThinking) return;
 
 		hasAsked = true;
+		lastSentMessage = uiState.aiPrompt.trim();
 		const context = getContextForGame();
 		isThinking = true;
 		uiState.aiResponse = '';
@@ -260,6 +262,9 @@
 	<!-- Chat Area -->
 	<div class="chat-area">
 		{#if isThinking}
+			{#if lastSentMessage}
+				<div class="user-bubble">{lastSentMessage}</div>
+			{/if}
 			<div class="speech-bubble">
 				<div class="typing-indicator">
 					<span class="dot"></span>
@@ -268,6 +273,9 @@
 				</div>
 			</div>
 		{:else if uiState.aiResponse}
+			{#if lastSentMessage}
+				<div class="user-bubble">{lastSentMessage}</div>
+			{/if}
 			<div class="speech-bubble">
 				<p class="response-text">{uiState.aiResponse}</p>
 			</div>
@@ -418,6 +426,22 @@
 		font-weight: 600;
 	}
 
+	/* ── User message bubble ── */
+	.user-bubble {
+		align-self: flex-end;
+		background: linear-gradient(135deg, #1e3a55, #1a3048);
+		border: 1px solid #2a5a7a;
+		border-radius: 14px;
+		border-bottom-right-radius: 4px;
+		padding: 8px 12px;
+		margin-bottom: 6px;
+		font-size: 0.8rem;
+		color: #90c8e8;
+		max-width: 85%;
+		text-align: right;
+		animation: bubble-in 0.2s ease-out;
+	}
+
 	/* ── Chat area ── */
 	.chat-area {
 		flex: 1;
@@ -426,6 +450,7 @@
 		display: flex;
 		flex-direction: column;
 		justify-content: flex-start;
+		align-items: stretch;
 		min-height: 0;
 	}
 

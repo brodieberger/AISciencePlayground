@@ -95,10 +95,6 @@
     {#if gameState.lastResult}
         {@const r = gameState.lastResult}
         <div class="result-section">
-            <div class="stage-label">
-                RESULT
-                {#if r.fromCache}<span class="cache-badge">cached</span>{/if}
-            </div>
 
             <!-- Visual renderer -->
             <div

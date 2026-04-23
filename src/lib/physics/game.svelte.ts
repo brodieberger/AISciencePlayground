@@ -76,6 +76,10 @@ export function startGame(
     container = targetContainer;
     onGoalReached = options.onGoal || null;
     physicsGameState.mode = 'levels';
+    uiState.gameType = 'physics';
+    uiState.goalReached = false;
+    uiState.aiPrompt = '';
+    uiState.aiResponse = '';
     init();
 }
 

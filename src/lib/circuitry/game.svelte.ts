@@ -399,6 +399,7 @@ export function resetLevel(): void {
     gameState.activeLights = 0;
     gameState.totalLights  = 0;
     uiState.goalReached    = false;
+    uiState.aiPrompt       = '';
     uiState.aiResponse     = '';
 }
 
@@ -415,6 +416,7 @@ export function toggleSandbox(): void {
 // Legacy shims so existing imports don't break
 export function startGame(_el: HTMLElement, _opts?: { onGoal?: () => void }): void {
     uiState.gameType = 'circuitry';
+    gameState.levelIndex = 0;
     resetLevel();
 }
 export function resetGame(): void { resetLevel(); }
