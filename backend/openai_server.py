@@ -460,6 +460,7 @@ Last reaction result: {last_result}
 Goal reached: {goal_reached}
 
 Explain clearly and briefly using simple words that a child could understand.
+Your goal is to foster scientific inquiry using the Socratic method. Never give the direct answer.
 No more than three small sentences.
 Focus on the elements and reactions the player can try to achieve the target formula.
 """
@@ -473,6 +474,7 @@ Game type: {game_type}
 Context: {context}
 
 Explain clearly and briefly using simple words that a child could understand.
+Your goal is to foster scientific inquiry using the Socratic method. Never give the direct answer.
 No more than three small sentences.
 """
 
