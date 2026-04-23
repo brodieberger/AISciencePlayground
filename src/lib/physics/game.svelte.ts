@@ -13,7 +13,7 @@ import {
     pendingSeesawPivot
 } from "./level-creation";
 
-import { levels, type PrefabType } from "./level-data";
+import { levels, type LevelConfig, type PrefabType } from "./level-data";
 
 const { Engine, World, Render, Runner, Events, Body, Query } = Matter;
 
@@ -25,7 +25,32 @@ let render: Matter.Render;
 let runner: Matter.Runner;
 
 let ball: Matter.Body;
-let goal: Matter.Body;
+let goal: Matter.Body | null = null;
+
+let drawnBodies: Matter.Body[] = [];
+let isSandbox = false;
+let sandboxConfig: LevelConfig | null = null;
+let sandboxDrawActive = false;
+let drawStart: { x: number; y: number } | null = null;
+let drawCurrent: { x: number; y: number } | null = null;
+let didDraw = false;
+let sandboxDragTarget: 'ball' | 'goal' | null = null;
+let sandboxDragOffset = { x: 0, y: 0 };
+let prefabDragEntry: typeof placedPrefabs[0] | null = null;
+let prefabDragOffset = { x: 0, y: 0 };
+let prefabDragMoved = false;
+let skipNextClick = false;
+
+const SANDBOX_CONFIG: LevelConfig = {
+    ball: { x: 350, y: 60 },
+    goal: { x: 550, y: 450 },
+    prefabs: [
+        { type: 'bridge',    count: 15 },
+        { type: 'bouncepad', count: 10 },
+        { type: 'bumper',    count: 10 },
+        { type: 'seesaw',    count: 3  },
+    ],
+};
 
 let placedPrefabs: { type: PrefabType; body: Matter.Body | Matter.Body[]; constraints?: Matter.Constraint[] }[] = [];
 let seesawBeams: Matter.Body[] = [];
@@ -48,6 +73,7 @@ export function startGame(
 ) {
     container = targetContainer;
     onGoalReached = options.onGoal || null;
+    physicsGameState.mode = 'levels';
     init();
 }
 
@@ -80,12 +106,12 @@ function init() {
     setupOverlay(w, h);
     createBounds(world, w, h);
 
-    const level = levels[physicsGameState.currentLevelIndex];
-    ball = createBallAndCage(world, level);
-    goal = createGoal(world, level);
-    createGeometry(world, level);
+    const config = sandboxConfig ?? levels[physicsGameState.currentLevelIndex];
+    ball = createBallAndCage(world, config);
+    goal = createGoal(world, config);
+    createGeometry(world, config);
 
-    physicsGameState.inventory = level.prefabs.map(p => ({ ...p }));
+    physicsGameState.inventory = config.prefabs.map(p => ({ ...p }));
     physicsGameState.activePrefab = null;
 
     placedPrefabs = [];
@@ -101,10 +127,10 @@ function init() {
     Events.on(engine, "collisionStart", (event) => {
         event.pairs.forEach(({ bodyA, bodyB }) => {
             const isScoring = (b: Matter.Body) => b === ball || b.label === 'prefab:seesaw:ball';
-            if (
+            if (goal && (
                 (isScoring(bodyA) && bodyB === goal) ||
                 (isScoring(bodyB) && bodyA === goal)
-            ) {
+            )) {
                 if (onGoalReached) onGoalReached();
             }
 
@@ -194,7 +220,10 @@ function setupOverlay(w: number, h: number) {
     if (!ctx) throw new Error("Could not get 2D context");
     overlayCtx = ctx;
 
-    overlayCanvas.addEventListener("mouseleave", () => { ghostPos = null; });
+    overlayCanvas.addEventListener("mouseleave", () => { ghostPos = null; drawStart = null; sandboxDragTarget = null; prefabDragEntry = null; });
+    overlayCanvas.addEventListener("mousedown", onCanvasMouseDown);
+    overlayCanvas.addEventListener("mousemove", onCanvasMouseMove);
+    overlayCanvas.addEventListener("mouseup", onCanvasMouseUp);
     overlayCanvas.addEventListener("click", onCanvasClick);
     overlayCanvas.addEventListener("contextmenu", onCanvasRightClick);
     overlayCanvas.addEventListener("dragover", onDragOver);
@@ -220,12 +249,155 @@ function tryRotateAt(x: number, y: number) {
     const hits = Query.point(rotatableBodies, { x, y });
     if (hits.length === 0) return;
 
-    Body.setAngle(hits[hits.length - 1], hits[hits.length - 1].angle + Math.PI / 2);
+    const body = hits[hits.length - 1];
+    Body.setAngle(body, body.angle + Math.PI / 4);
     updateAIContext();
 }
 
+function onCanvasMouseDown(e: MouseEvent) {
+    if (sandboxDrawActive) {
+        e.preventDefault();
+        drawStart = { x: e.offsetX, y: e.offsetY };
+        drawCurrent = { x: e.offsetX, y: e.offsetY };
+        didDraw = false;
+        return;
+    }
+    if (!physicsGameState.activePrefab) {
+        const pt = { x: e.offsetX, y: e.offsetY };
+
+        // Sandbox-only: drag ball or goal
+        if (isSandbox) {
+            if (Query.point([ball], pt).length > 0) {
+                sandboxDragTarget = 'ball';
+                sandboxDragOffset = { x: e.offsetX - ball.position.x, y: e.offsetY - ball.position.y };
+                e.preventDefault();
+                return;
+            }
+            if (goal && Query.point([goal], pt).length > 0) {
+                sandboxDragTarget = 'goal';
+                sandboxDragOffset = { x: e.offsetX - goal.position.x, y: e.offsetY - goal.position.y };
+                e.preventDefault();
+                return;
+            }
+        }
+
+        // Any mode: drag placed prefabs
+        const allPlaced = placedPrefabs.flatMap(p => Array.isArray(p.body) ? p.body : [p.body]);
+        const hits = Query.point(allPlaced, pt);
+        if (hits.length > 0) {
+            const hitBody = hits[hits.length - 1];
+            const entry = placedPrefabs.find(p => {
+                const bodies = Array.isArray(p.body) ? p.body : [p.body];
+                return bodies.some(b => b === hitBody || (b.parts && b.parts.includes(hitBody)));
+            });
+            if (entry) {
+                const primary = (Array.isArray(entry.body) ? entry.body[0] : entry.body) as Matter.Body;
+                prefabDragEntry = entry;
+                prefabDragOffset = { x: e.offsetX - primary.position.x, y: e.offsetY - primary.position.y };
+                prefabDragMoved = false;
+                e.preventDefault();
+            }
+        }
+    }
+}
+
+function onCanvasMouseMove(e: MouseEvent) {
+    if (sandboxDragTarget) {
+        const tx = e.offsetX - sandboxDragOffset.x;
+        const ty = e.offsetY - sandboxDragOffset.y;
+        if (sandboxDragTarget === 'ball') {
+            const dx = tx - ball.position.x;
+            const dy = ty - ball.position.y;
+            Body.setPosition(ball, { x: tx, y: ty });
+            Body.setVelocity(ball, { x: 0, y: 0 });
+            if (!physicsGameState.cageReleased) {
+                for (const w of cageWalls) {
+                    Body.setPosition(w, { x: w.position.x + dx, y: w.position.y + dy });
+                }
+            }
+        } else if (sandboxDragTarget === 'goal' && goal) {
+            Body.setPosition(goal, { x: tx, y: ty });
+        }
+        return;
+    }
+    if (prefabDragEntry) {
+        const primary = (Array.isArray(prefabDragEntry.body) ? prefabDragEntry.body[0] : prefabDragEntry.body) as Matter.Body;
+        const tx = e.offsetX - prefabDragOffset.x;
+        const ty = e.offsetY - prefabDragOffset.y;
+        const dx = tx - primary.position.x;
+        const dy = ty - primary.position.y;
+        if (Math.hypot(dx, dy) > 2) prefabDragMoved = true;
+        movePrefabEntry(prefabDragEntry, dx, dy);
+        return;
+    }
+    if (sandboxDrawActive && drawStart) {
+        drawCurrent = { x: e.offsetX, y: e.offsetY };
+        didDraw = Math.hypot(e.offsetX - drawStart.x, e.offsetY - drawStart.y) > 5;
+    }
+}
+
+function movePrefabEntry(entry: typeof placedPrefabs[0], dx: number, dy: number) {
+    const bodies = Array.isArray(entry.body) ? entry.body : [entry.body];
+    for (const b of bodies as Matter.Body[]) {
+        Body.setPosition(b, { x: b.position.x + dx, y: b.position.y + dy });
+        if (!b.isStatic) {
+            Body.setVelocity(b, { x: 0, y: 0 });
+            Body.setAngularVelocity(b, 0);
+        }
+    }
+    // Update world-space constraint anchors (seesaw pivot, locks)
+    for (const c of entry.constraints ?? []) {
+        if (c.pointB) { c.pointB.x += dx; c.pointB.y += dy; }
+    }
+}
+
+function onCanvasMouseUp(e: MouseEvent) {
+    if (sandboxDragTarget) {
+        sandboxDragTarget = null;
+        return;
+    }
+    if (prefabDragEntry) {
+        if (!prefabDragMoved) {
+            // Short tap with no movement → rotate
+            const primary = (Array.isArray(prefabDragEntry.body) ? prefabDragEntry.body[0] : prefabDragEntry.body) as Matter.Body;
+            if (!primary.label.startsWith('prefab:seesaw:')) {
+                Body.setAngle(primary, primary.angle + Math.PI / 4);
+                updateAIContext();
+            }
+        }
+        prefabDragEntry = null;
+        prefabDragMoved = false;
+        skipNextClick = true;
+        return;
+    }
+    if (!sandboxDrawActive || !drawStart || !didDraw) {
+        drawStart = null;
+        drawCurrent = null;
+        return;
+    }
+    const x1 = Math.min(drawStart.x, e.offsetX);
+    const y1 = Math.min(drawStart.y, e.offsetY);
+    const w  = Math.abs(e.offsetX - drawStart.x);
+    const h  = Math.abs(e.offsetY - drawStart.y);
+    if (w > 10 && h > 4) {
+        const { Bodies: B } = Matter;
+        const body = B.rectangle(x1 + w / 2, y1 + h / 2, w, h, {
+            isStatic: true,
+            label: 'sandbox:drawn',
+            render: { fillStyle: '#2d3a4a', strokeStyle: '#4a6a8a', lineWidth: 2 },
+        });
+        World.add(world, body);
+        drawnBodies.push(body);
+    }
+    drawStart = null;
+    drawCurrent = null;
+    didDraw = false;
+}
+
 function onCanvasClick(e: MouseEvent) {
+    if (skipNextClick) { skipNextClick = false; return; }
     if (physicsGameState.activePrefab) return;
+    if (sandboxDrawActive) return;
     tryRotateAt(e.offsetX, e.offsetY);
 }
 
@@ -236,10 +408,19 @@ function onCanvasRightClick(e: MouseEvent) {
 
 function removePrefabAt(x: number, y: number) {
     const allPlaced = placedPrefabs.flatMap(p => Array.isArray(p.body) ? p.body : [p.body]);
-    const hits = Query.point(allPlaced, { x, y });
+    const hits = Query.point([...allPlaced, ...drawnBodies], { x, y });
     if (hits.length === 0) return;
 
     const hitBody = hits[hits.length - 1];
+
+    const drawnIdx = drawnBodies.indexOf(hitBody);
+    if (drawnIdx !== -1) {
+        drawnBodies.splice(drawnIdx, 1);
+        World.remove(world, hitBody);
+        updateAIContext();
+        return;
+    }
+
     const idx = placedPrefabs.findIndex(p => {
         const bodies = Array.isArray(p.body) ? p.body : [p.body];
         return bodies.some(b => b === hitBody || (b.parts && b.parts.includes(hitBody)));
@@ -319,12 +500,28 @@ function redrawOverlay() {
     if (ghostPos && physicsGameState.activePrefab) {
         drawGhost(physicsGameState.activePrefab, ghostPos.x, ghostPos.y);
     }
+
+    if (sandboxDrawActive && drawStart && drawCurrent) {
+        const x = Math.min(drawStart.x, drawCurrent.x);
+        const y = Math.min(drawStart.y, drawCurrent.y);
+        const w = Math.abs(drawCurrent.x - drawStart.x);
+        const h = Math.abs(drawCurrent.y - drawStart.y);
+        overlayCtx.save();
+        overlayCtx.globalAlpha = 0.45;
+        overlayCtx.fillStyle = '#2d3a4a';
+        overlayCtx.fillRect(x, y, w, h);
+        overlayCtx.globalAlpha = 0.9;
+        overlayCtx.strokeStyle = '#66aaff';
+        overlayCtx.lineWidth = 2;
+        overlayCtx.setLineDash([5, 3]);
+        overlayCtx.strokeRect(x, y, w, h);
+        overlayCtx.restore();
+    }
 }
 
 const GHOST_LABELS: Record<PrefabType, string> = {
     bridge: 'Bridge',
     bouncepad: 'Bounce Pad',
-    ramp: 'Ramp',
     bumper: 'Bumper',
     seesaw: 'Seesaw',
 };
@@ -342,11 +539,6 @@ function drawGhost(type: PrefabType, x: number, y: number) {
         case 'bouncepad':
             overlayCtx.fillStyle = '#ff4488';
             overlayCtx.fillRect(-40, -7, 80, 14);
-            break;
-        case 'ramp':
-            overlayCtx.rotate(Math.PI / 6);
-            overlayCtx.fillStyle = '#ffaa00';
-            overlayCtx.fillRect(-70, -5, 140, 10);
             break;
         case 'bumper':
             overlayCtx.fillStyle = '#8844ff';
@@ -438,8 +630,8 @@ export function releaseCage() {
 export function resetBall() {
     World.remove(world, ball);
     cageWalls.forEach((wall) => World.remove(world, wall));
-    const level = levels[physicsGameState.currentLevelIndex];
-    ball = createBallAndCage(world, level);
+    const config = sandboxConfig ?? levels[physicsGameState.currentLevelIndex];
+    ball = createBallAndCage(world, config);
     seesawLaunched = false;
     physicsGameState.cageReleased = false;
     updateAIContext();
@@ -453,11 +645,17 @@ function resetWorld() {
 
     container.innerHTML = "";
     placedPrefabs = [];
+    drawnBodies = [];
     seesawBeams = [];
     seesawLocks = [];
     seesawBallBodies = [];
     seesawLaunched = false;
     ghostPos = null;
+    drawStart = null;
+    drawCurrent = null;
+    sandboxDragTarget = null;
+    prefabDragEntry = null;
+    prefabDragMoved = false;
     physicsGameState.cageReleased = false;
 
     init();
@@ -465,6 +663,42 @@ function resetWorld() {
 
 export function resetGame() {
     resetWorld();
+}
+
+export function startSandbox(
+    targetContainer: HTMLElement,
+    options: { onGoal?: () => void } = {}
+) {
+    container = targetContainer;
+    onGoalReached = options.onGoal || null;
+    isSandbox = true;
+    physicsGameState.mode = 'sandbox';
+    sandboxConfig = { ...SANDBOX_CONFIG, prefabs: SANDBOX_CONFIG.prefabs.map(p => ({ ...p })) };
+    init();
+}
+
+export function clearAllPrefabs() {
+    for (const entry of placedPrefabs) {
+        const bodies = Array.isArray(entry.body) ? entry.body : [entry.body];
+        for (const b of bodies) World.remove(world, b);
+        for (const c of entry.constraints ?? []) World.remove(world, c);
+    }
+    for (const b of drawnBodies) World.remove(world, b);
+    placedPrefabs = [];
+    drawnBodies = [];
+    seesawBeams = [];
+    seesawBallBodies = [];
+    seesawLocks = [];
+    sandboxConfig = { ...SANDBOX_CONFIG, prefabs: SANDBOX_CONFIG.prefabs.map(p => ({ ...p })) };
+    physicsGameState.inventory = sandboxConfig.prefabs.map(p => ({ ...p }));
+    updateAIContext();
+}
+
+export function setSandboxDrawMode(active: boolean) {
+    sandboxDrawActive = active;
+    physicsGameState.sandboxDrawActive = active;
+    overlayCanvas.style.cursor = active ? 'crosshair' : 'default';
+    if (!active) { drawStart = null; drawCurrent = null; }
 }
 
 export function levelUp() {
@@ -486,10 +720,11 @@ function updateAIContext() {
 }
 
 export function buildPhysicsContext() {
-    const level = levels[physicsGameState.currentLevelIndex];
+    const config = sandboxConfig ?? levels[physicsGameState.currentLevelIndex];
     return {
+        mode: isSandbox ? 'sandbox' : 'levels',
         ball: ball.position,
-        goal: goal.position,
+        goal: goal?.position ?? null,
         placedPrefabs: placedPrefabs.map(p => ({
             type: p.type,
             position: Array.isArray(p.body)
@@ -497,6 +732,6 @@ export function buildPhysicsContext() {
                 : (p.body as Matter.Body).position
         })),
         inventory: physicsGameState.inventory.map(i => ({ type: i.type, remaining: i.count })),
-        solution: level.solution ?? '',
+        solution: config.solution ?? '',
     };
 }

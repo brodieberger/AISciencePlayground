@@ -91,7 +91,8 @@ function cageStyle() {
     };
 }
 
-export function createGoal(world: Matter.World, level: LevelConfig) {
+export function createGoal(world: Matter.World, level: LevelConfig): Matter.Body | null {
+    if (!level.goal) return null;
     const { x, y } = level.goal;
     const goal = Bodies.rectangle(x, y, 80, 20, {
         isStatic: true,
@@ -115,7 +116,6 @@ export function spawnPrefab(
     switch (type) {
         case 'bridge':    return spawnBridge(world, x, y);
         case 'bouncepad': return spawnBouncePad(world, x, y);
-        case 'ramp':      return spawnRamp(world, x, y);
         case 'bumper':    return spawnBumper(world, x, y);
         case 'seesaw':    return spawnSeesaw(world, x, y);
     }
@@ -147,17 +147,6 @@ function spawnBouncePad(world: Matter.World, x: number, y: number): Matter.Body 
     return body;
 }
 
-// An angled ramp (30 degrees)
-function spawnRamp(world: Matter.World, x: number, y: number): Matter.Body {
-    const body = Bodies.rectangle(x, y, 140, 10, {
-        isStatic: true,
-        angle: Math.PI / 6,
-        label: 'prefab:ramp',
-        render: { fillStyle: '#ffaa00', strokeStyle: '#ffcc44', lineWidth: 2 }
-    });
-    World.add(world, body);
-    return body;
-}
 
 // A circular bumper that deflects the ball
 function spawnBumper(world: Matter.World, x: number, y: number): Matter.Body {

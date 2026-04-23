@@ -12,6 +12,8 @@ export const physicsGameState = $state({
 	inventory: [] as { type: PrefabType; count: number }[],
 	activePrefab: null as PrefabType | null,
 	cageReleased: false,
+	sandboxDrawActive: false,
+	mode: 'levels' as 'levels' | 'sandbox',
 });
 
 export async function askAI(gameType: string, userPrompt: string, context: Record<string, unknown>) {

@@ -12,7 +12,6 @@
 	const prefabLabels: Record<PrefabType, string> = {
 		bridge: '🪵 Bridge',
 		bouncepad: '🟣 Bounce Pad',
-		ramp: '📐 Ramp',
 		bumper: '🔵 Bumper',
 		seesaw: '⚖️ Seesaw',
 	};
