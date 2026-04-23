@@ -68,7 +68,7 @@ Placed objects: {placed_prefabs}
 Remaining inventory: {inventory}
 Intended solution: {solution}
 
-Explain briefly using simple words a child could understand. No more than three sentences.
+REQUIRED: Explain briefly using simple words a child could understand. No more than three sentences.
 Do not use coordinates - describe positions relatively. The ball gains momentum by dropping and rolling.
 Guide the player toward the intended solution without giving it away directly.
 The player must click "Release Ball" to start.
@@ -89,7 +89,7 @@ Solved: {solved}
 Short circuit: {short_circuit}
 Active lights: {active_lights} / {total_lights}
 
-Explain briefly using simple words a child could understand. No more than three sentences.
+REQUIRED: Explain briefly using simple words a child could understand. No more than three sentences.
 REQUIRED: Never give the direct answer
 Focus on the circuit state and what the player should do next.
 """
@@ -114,9 +114,9 @@ Currently selected elements: {selected_elements}
 Last reaction result: {last_result}
 Goal reached: {goal_reached}
 
-REQUIRED: Explain briefly using simple words a child could understand. 
-REQUIRED: No more than three sentences.
-REQUIRED: Never give the direct answer
+REQUIRED: Explain briefly using simple words a child could understand. Really dim it down.
+REQUIRED: No more than three sentences!!!!!
+REQUIRED: Never give the direct answer (i.e telling them the exact number of elements they need)
 Focus on which elements to combine to reach the target formula.
 """
 
