@@ -6,10 +6,35 @@
 	import {buildCircuitryContext} from '$lib/circuitry/game.svelte';
 
 	let isThinking = $state(false);
+	let hasAsked = $state(false);
+
+	/* Preset questions per game type */
+	const presetQuestions: Record<string, string[]> = {
+		physics: [
+			'What is my goal?',
+			'How do I play?',
+			'What forces are at work here?'
+		],
+		chemistry: [
+			'What is my goal?',
+			'How do I play?',
+			'What elements should I combine?'
+		],
+		circuitry: [
+			'What is my goal?',
+			'How do I play?',
+			'How does a circuit work?'
+		]
+	};
+
+	function getPresets(): string[] {
+		return presetQuestions[uiState.gameType] ?? presetQuestions.physics;
+	}
 
 	async function handleAskAI() {
 		if (!uiState.aiPrompt.trim() || isThinking) return;
 
+		hasAsked = true;
 		const context = getContextForGame();
 		isThinking = true;
 		uiState.aiResponse = '';
@@ -19,6 +44,11 @@
 		isThinking = false;
 		uiState.aiResponse = reply;
 		uiState.aiPrompt = '';
+	}
+
+	function handlePresetClick(question: string) {
+		uiState.aiPrompt = question;
+		handleAskAI();
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
@@ -74,6 +104,21 @@
 			<div class="speech-bubble greeting">
 				<p class="response-text">Hi there! 👋 I'm <strong>Lumi</strong>, your science tutor. Ask me anything about your experiment!</p>
 			</div>
+
+			<!-- Preset Questions -->
+			{#if !hasAsked}
+				<div class="preset-questions">
+					{#each getPresets() as question}
+						<button
+							class="preset-btn"
+							onclick={() => handlePresetClick(question)}
+							disabled={isThinking}
+						>
+							{question}
+						</button>
+					{/each}
+				</div>
+			{/if}
 		{/if}
 	</div>
 
@@ -97,6 +142,7 @@
 			{/if}
 		</button>
 	</div>
+
 </div>
 
 <style>
@@ -325,6 +371,54 @@ button.thinking {
 	border-top-color: #ffd54f;
 	border-radius: 50%;
 	animation: spin 0.7s linear infinite;
+}
+
+/* ── Preset question buttons ── */
+.preset-questions {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 8px 0 2px;
+	flex-shrink: 0;
+	animation: presets-in 0.35s ease-out;
+}
+
+.preset-btn {
+	width: 100% !important;
+	height: auto !important;
+	padding: 8px 12px !important;
+	border-radius: 8px !important;
+	background: transparent !important;
+	border: 1.5px solid #2a3a55 !important;
+	color: #a0b8cc !important;
+	font-size: 0.78rem;
+	font-family: inherit;
+	text-align: left;
+	line-height: 1.3;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+.preset-btn:hover:not(:disabled) {
+	border-color: #ffd54f !important;
+	color: #ffd54f !important;
+	background: rgba(255, 213, 79, 0.06) !important;
+	transform: translateY(-1px) !important;
+	box-shadow: 0 2px 10px rgba(255, 213, 79, 0.12) !important;
+}
+
+.preset-btn:active:not(:disabled) {
+	transform: translateY(0) !important;
+}
+
+.preset-btn:disabled {
+	opacity: 0.35;
+	cursor: not-allowed;
+}
+
+@keyframes presets-in {
+	from { opacity: 0; transform: translateY(8px); }
+	to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ── Animations ── */
