@@ -1,80 +1,157 @@
 <!-- src/routes/circuitry/+page.svelte -->
 <script lang="ts">
-    import { startGame, askAI, gameState } from '$lib/circuitry/game.svelte';
-    import { uiState } from '$lib/game-ui.svelte';
-
-    import GameShell      from '$lib/components/GameShell.svelte';
-    import AIPanel        from '$lib/components/AIPanel.svelte';
-    import GoalBanner     from '$lib/components/GoalBanner.svelte';
-    import GameControls   from './GameControls.svelte';
-    import CircuitryBoard from '$lib/circuitry/CircuitryBoard.svelte';
-    import type { ComponentType } from '$lib/circuitry/game.svelte';
-
-    let selected: ComponentType = $state('wire');
-
-    // Initialise game (sets gameType context, loads first level)
-    $effect(() => {
-        startGame(document.body, {
-            onGoal: () => { uiState.goalReached = true; },
-        });
-    });
+    import { goto } from '$app/navigation';
 </script>
 
-<GameShell>
-    <!-- ── LEFT: AI panel ── -->
-    {#snippet ai()}
-        <h2>Lab Assistant</h2>
-        <AIPanel />
-    {/snippet}
+<div class="page">
+    <a class="back" href="/">← Back</a>
 
-    <!-- ── RIGHT: game ── -->
-    {#snippet experiment()}
-        <!-- Goal banner sits above the board, absolutely positioned -->
-        <GoalBanner />
-
-        <!-- Board: grows to fill space between header and controls -->
-        <div class="game-container">
-            <CircuitryBoard bind:selected />
+    <div class="content">
+        <div class="title-block">
+            <span class="icon">⚡</span>
+            <h1>Circuitry Lab</h1>
+            <p class="sub">Electronics & Current</p>
         </div>
 
-        <!-- Controls bar fixed at bottom of experiment panel -->
-        <div class="controls-bar">
-            <GameControls bind:selected />
+        <div class="mode-grid">
+            <button class="mode-card" onclick={() => goto('/circuitry/levels')}>
+                <span class="mode-icon">🧩</span>
+                <span class="mode-label">Puzzle Levels</span>
+                <span class="mode-sub">Complete circuit challenges with specific goals to reach</span>
+                <span class="mode-arrow">→</span>
+            </button>
+
+            <button class="mode-card" onclick={() => goto('/circuitry/sandbox')}>
+                <span class="mode-icon">🔬</span>
+                <span class="mode-label">Sandbox</span>
+                <span class="mode-sub">Build freely — all components, no goal required</span>
+                <span class="mode-arrow">→</span>
+            </button>
         </div>
-    {/snippet}
-</GameShell>
+    </div>
+</div>
 
 <style>
-    /*
-     * GameShell's .experiment-panel uses:
-     *   display:flex; flex-direction:column; padding:15px;
-     * We need padding:0 so board goes edge-to-edge and
-     * controls bar sticks to the bottom cleanly.
-     */
-    :global(.experiment-panel) {
-        padding: 0 !important;
-        overflow: hidden !important;
-    }
+:global(html, body) {
+    margin: 0; padding: 0;
+    height: 100%;
+    background: #0b1020;
+    color: #e0e0e0;
+    font-family: 'JetBrains Mono', monospace;
+    overflow: hidden;
+}
 
-    /* Board fills all remaining vertical space */
-    .game-container {
-        flex: 1 1 0;
-        min-height: 0;
-        width: 100%;
-        background: #07111f;
-        position: relative;
-        overflow: hidden;
-        /* Centre the board; container-type exposes cqw/cqh to CircuitryBoard */
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        container-type: size;
-    }
+.page {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0b1020;
+}
 
-    /* Controls bar never shrinks — always visible */
-    .controls-bar {
-        flex-shrink: 0;
-        width: 100%;
-        overflow-x: auto;
-    }
+.back {
+    position: absolute;
+    top: 20px;
+    left: 24px;
+    font-size: 0.8rem;
+    color: #4a6a7a;
+    text-decoration: none;
+    letter-spacing: 0.05em;
+    transition: color 0.2s;
+}
+.back:hover { color: #88ddff; }
+
+.content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 40px;
+}
+
+.title-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.icon {
+    font-size: 3rem;
+    filter: drop-shadow(0 0 12px #88ddff);
+}
+
+h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 2.8rem;
+    margin: 0;
+    background: linear-gradient(135deg, #a0d8f0, #88ddff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.sub {
+    font-size: 0.72rem;
+    color: #4a6a7a;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin: 0;
+}
+
+.mode-grid {
+    display: flex;
+    gap: 20px;
+}
+
+.mode-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: 200px;
+    padding: 28px 20px 20px;
+    background: #0d1828;
+    border: 1.5px solid #1a3a5a;
+    border-radius: 16px;
+    cursor: pointer;
+    text-align: center;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s, background 0.2s;
+    color: inherit;
+    font-family: inherit;
+}
+.mode-card:hover {
+    transform: translateY(-6px);
+    border-color: #88ddff;
+    background: color-mix(in srgb, #88ddff 8%, #0d1828);
+    box-shadow: 0 8px 32px #88ddff30;
+}
+
+.mode-icon  { font-size: 2.2rem; }
+
+.mode-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.2rem;
+    color: #88ddff;
+}
+
+.mode-sub {
+    font-size: 0.68rem;
+    color: #4a6a7a;
+    line-height: 1.4;
+    letter-spacing: 0.03em;
+}
+
+.mode-arrow {
+    margin-top: 4px;
+    font-size: 1rem;
+    color: #88ddff;
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: opacity 0.2s, transform 0.2s;
+}
+.mode-card:hover .mode-arrow {
+    opacity: 0.8;
+    transform: translateX(0);
+}
 </style>

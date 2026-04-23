@@ -1,22 +1,9 @@
-<!-- src/routes/circuitry/GameControls.svelte -->
+<!-- src/routes/circuitry/SandboxControls.svelte -->
 <script lang="ts">
-    import {
-        gameState,
-        levels,
-        resetLevel,
-        nextLevel,
-        prevLevel,
-        type ComponentType,
-    } from '$lib/circuitry/game.svelte';
+    import { gameState, type ComponentType } from '$lib/circuitry/game.svelte';
     import { uiState } from '$lib/game-ui.svelte';
 
     let { selected = $bindable<ComponentType>('wire') }: { selected: ComponentType } = $props();
-
-    function handleReset() {
-        resetLevel();
-        uiState.goalReached = false;
-        uiState.aiResponse  = '';
-    }
 
     const ALL_ITEMS: { type: ComponentType; label: string; icon: string; color: string }[] = [
         { type: 'battery',  label: 'Battery',  icon: '🔋', color: '#2a6a2a' },
@@ -27,21 +14,29 @@
         { type: 'empty',    label: 'Eraser',    icon: '✕',  color: '#6a2a2a' },
     ];
 
-    let currentLevel  = $derived(levels[gameState.levelIndex]);
-    let placeable     = $derived(new Set(currentLevel?.available ?? []));
-    let inventory     = $derived(ALL_ITEMS.filter(m => placeable.has(m.type)));
-    let referenceOnly = $derived(ALL_ITEMS.filter(m => !placeable.has(m.type) && m.type !== 'empty'));
-    let hasPrev       = $derived(gameState.levelIndex > 0);
-    let hasNext       = $derived(gameState.levelIndex < levels.length - 1);
+    function handleReset() {
+        const rows = gameState.grid.length;
+        const cols = gameState.grid[0]?.length ?? 10;
+        gameState.grid = Array.from({ length: rows }, () =>
+            Array.from({ length: cols }, () => ({
+                type: 'empty' as ComponentType,
+                switchClosed: false, energized: false, lit: false, shortPath: false,
+            }))
+        );
+        gameState.solved = false;
+        gameState.shortCircuit = false;
+        gameState.hint = 'Sandbox mode — build freely, no goal required!';
+        gameState.activeLights = 0;
+        gameState.totalLights = 0;
+        uiState.aiResponse = '';
+    }
 </script>
 
 <div class="controls">
-
-    <!-- Inventory -->
     <div class="section">
-        <div class="section-label">INVENTORY</div>
+        <div class="section-label">COMPONENTS</div>
         <div class="inv-row">
-            {#each inventory as item}
+            {#each ALL_ITEMS as item}
                 <button
                     class="inv-item"
                     class:active={selected === item.type}
@@ -59,35 +54,11 @@
         </div>
     </div>
 
-    <!-- On Board (reference only) -->
-    {#if referenceOnly.length > 0}
-        <div class="section">
-            <div class="section-label">ON BOARD</div>
-            <div class="inv-row">
-                {#each referenceOnly as item}
-                    <div class="inv-item ref" style="--accent:{item.color}" title={item.label}>
-                        <span class="inv-icon">{item.icon}</span>
-                        <span class="inv-label">{item.label}</span>
-                    </div>
-                {/each}
-            </div>
-        </div>
-    {/if}
-
-    <!-- Status + actions -->
     <div class="right-col">
-        {#if gameState.goalDescription}
-            <div class="goal-label">
-                🎯 Goal: {gameState.goalDescription}
-            </div>
-        {/if}
-
         {#if gameState.hint}
-            <div
-                class="hint"
-                class:hint-ok={gameState.solved && !gameState.shortCircuit}
-                class:hint-err={gameState.shortCircuit}
-            >{gameState.hint}</div>
+            <div class="hint" class:hint-ok={gameState.solved} class:hint-err={gameState.shortCircuit}>
+                {gameState.hint}
+            </div>
         {/if}
 
         {#if gameState.totalLights > 0}
@@ -101,8 +72,6 @@
 
         <div class="actions">
             <button class="btn btn-reset" onclick={handleReset}>↺ Reset</button>
-<button class="btn btn-prev" onclick={prevLevel} disabled={!hasPrev}>← Prev</button>
-            <button class="btn btn-next" onclick={nextLevel} disabled={!hasNext}>Next →</button>
         </div>
 
         <div class="key">
@@ -111,7 +80,6 @@
             <span><kbd>Click switch</kbd> toggle</span>
         </div>
     </div>
-
 </div>
 
 <style>
@@ -150,7 +118,7 @@
         flex-shrink: 0;
         font-family: inherit; color: inherit;
     }
-    .inv-item:hover:not(.ref) {
+    .inv-item:hover {
         background: #152030;
         border-color: color-mix(in srgb, var(--accent) 80%, white);
         box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 45%, transparent);
@@ -161,7 +129,6 @@
         border-color: color-mix(in srgb, var(--accent) 90%, white);
         box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent);
     }
-    .inv-item.ref { cursor: default; opacity: 0.5; border-style: dashed; }
 
     .inv-icon  { font-size: 1.3rem; line-height: 1; }
     .inv-label { font-size: 0.58rem; color: #7aaccc; text-align: center; letter-spacing:.03em; }
@@ -180,13 +147,6 @@
         min-width: 150px; max-width: 500px;
     }
 
-    .goal-label {
-        padding: 6px 9px; background: #0d1a10;
-        border-left: 3px solid #ffd54f; border-radius: 3px;
-        font-size: 0.74rem; color: #e8d080; line-height: 1.4;
-        font-weight: 600;
-    }
-
     .hint {
         padding: 6px 9px; background: #0d1828;
         border-left: 3px solid #3a8aee; border-radius: 3px;
@@ -200,7 +160,7 @@
     .pip.lit { opacity: 1; filter: drop-shadow(0 0 4px #ddbb00); }
     .pip-label { margin-left: 3px; }
 
-    .actions { display: flex; flex-wrap: wrap; gap: 4px; }
+    .actions { display: flex; gap: 4px; }
     .btn {
         padding: 6px 11px; border-radius: 4px; border: none;
         font-weight: bold; cursor: pointer;
@@ -209,11 +169,6 @@
     }
     .btn-reset        { background: #ff6666; color: #0b1020; }
     .btn-reset:hover  { background: #ff3333; box-shadow: 0 0 10px #ff3333; }
-    .btn-prev         { background: #66ccff; color: #0b1020; }
-    .btn-prev:hover:not(:disabled) { background: #33aaff; box-shadow: 0 0 10px #33aaff; }
-    .btn-next         { background: #66ccff; color: #0b1020; }
-    .btn-next:hover:not(:disabled) { background: #33aaff; box-shadow: 0 0 10px #33aaff; }
-    .btn:disabled     { opacity: 0.35; cursor: not-allowed; }
 
     .key { display: flex; flex-direction: column; gap: 2px; margin-top: 1px; }
     .key span { font-size: 0.63rem; color: #3a6a8a; display: flex; align-items: center; gap: 4px; }

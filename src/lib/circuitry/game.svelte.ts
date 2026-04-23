@@ -20,37 +20,53 @@ export interface Cell {
 }
 
 export interface CircuitLevel {
-    id:          string;
-    name:        string;
-    description: string;
-    rows:        number;
-    cols:        number;
-    available:   ComponentType[];
+    id:              string;
+    name:            string;
+    description:     string;
+    goalDescription: string;
+    rows:            number;
+    cols:            number;
+    available:       ComponentType[];
+    checkGoal:       (grid: Cell[][], activeLights: number, totalLights: number) => boolean;
 }
 
 // ── Levels ────────────────────────────────────────────────────────────────────
 
 export const levels: CircuitLevel[] = [
     {
-        id:          'level_1',
-        name:        'Light the Bulb',
-        description: 'Place a Battery and a Bulb, then connect them with Wires to complete the loop.',
+        id:              'level_1',
+        name:            'Complete the Circuit',
+        description:     'Place a Battery and a Bulb somewhere on the grid, then connect them with Wires to form a closed loop. Electricity needs a full circle to flow!',
+        goalDescription: 'Light at least one bulb.',
         rows: 4, cols: 6,
         available: ['battery', 'wire', 'light', 'empty'],
+        checkGoal: (_grid, activeLights) => activeLights >= 1,
     },
     {
-        id:          'level_2',
-        name:        'Switch Control',
-        description: 'Add a Switch to the path. Click the switch to toggle the bulb on and off.',
-        rows: 4, cols: 6,
+        id:              'level_2',
+        name:            'Add a Switch',
+        description:     'Wire a Switch into your circuit. Switches start OPEN — click one to close it and let current through. Click again to open it and cut the power!',
+        goalDescription: 'Light a bulb with a switch controlling the circuit.',
+        rows: 4, cols: 7,
         available: ['battery', 'wire', 'switch', 'light', 'empty'],
+        checkGoal: (grid, activeLights) =>
+            activeLights >= 1 &&
+            grid.flat().some(c => c.type === 'switch' && c.energized && c.switchClosed),
     },
     {
-        id:          'level_3',
-        name:        'Two Bulbs',
-        description: 'Light both bulbs. You can wire them in series or build parallel branches.',
-        rows: 4, cols: 6,
+        id:              'level_3',
+        name:            'Two Switches, Two Bulbs',
+        description:     'Build a bigger circuit with two Switches and two Bulbs. Both bulbs must be lit at the same time — you control each switch independently!',
+        goalDescription: 'Light 2 bulbs with 2 switches both closed in the circuit.',
+        rows: 5, cols: 8,
         available: ['battery', 'wire', 'switch', 'light', 'resistor', 'empty'],
+        checkGoal: (grid, activeLights) => {
+            if (activeLights < 2) return false;
+            const activeSwitches = grid.flat().filter(
+                c => c.type === 'switch' && c.energized && c.switchClosed
+            ).length;
+            return activeSwitches >= 2;
+        },
     },
 ];
 
@@ -68,14 +84,15 @@ function emptyGrid(rows: number, cols: number): Cell[][] {
 // ── Reactive state ────────────────────────────────────────────────────────────
 
 export const gameState = $state({
-    levelIndex:   0,
-    grid:         emptyGrid(levels[0].rows, levels[0].cols),
-    solved:       false,
-    shortCircuit: false,
-    hint:         levels[0].description,
-    activeLights: 0,
-    totalLights:  0,
-    sandboxMode:  false,
+    levelIndex:      0,
+    grid:            emptyGrid(levels[0].rows, levels[0].cols),
+    solved:          false,
+    shortCircuit:    false,
+    hint:            levels[0].description,
+    goalDescription: levels[0].goalDescription,
+    activeLights:    0,
+    totalLights:     0,
+    sandboxMode:     false,
 });
 
 // ── Adjacency helpers ─────────────────────────────────────────────────────────
@@ -96,6 +113,27 @@ function conducts(cell: Cell): boolean {
 function conductsNoLoad(cell: Cell): boolean {
     if (cell.type === 'light' || cell.type === 'resistor') return false;
     return conducts(cell);
+}
+
+function levelProgressHint(grid: Cell[][], activeLights: number, _totalLights: number): string {
+    const idx = gameState.levelIndex;
+    if (idx === 1) {
+        const hasSwitch = grid.flat().some(c => c.type === 'switch');
+        if (!hasSwitch) return `✓ Circuit works! Now add a Switch to control it.`;
+        const switchClosed = grid.flat().some(c => c.type === 'switch' && c.switchClosed);
+        if (!switchClosed) return `Switch placed — click it to close the circuit!`;
+        return `✓ ${activeLights} bulb(s) lit — make sure the switch is in the active path.`;
+    }
+    if (idx === 2) {
+        const activeSwitches = grid.flat().filter(c => c.type === 'switch' && c.energized && c.switchClosed).length;
+        if (activeLights < 2 && activeSwitches < 2)
+            return `✓ Circuit works! Add a second Switch and Bulb.`;
+        if (activeSwitches < 2)
+            return `${activeLights} bulb(s) lit — need 2 switches active in the circuit.`;
+        return `2 switches active — need ${2 - activeLights} more bulb(s) lit.`;
+    }
+    const tl = grid.flat().filter(c => c.type === 'light').length;
+    return tl > 0 ? `✓ Circuit works! ${activeLights}/${tl} bulbs lit.` : '✓ Circuit works!';
 }
 
 function openCircuitHint(grid: Cell[][]): string {
@@ -253,9 +291,8 @@ function findBatteryCycle(
 //   its connected component.  Multiple batteries handled independently.
 
 function solveCircuit(): void {
-    const grid    = gameState.grid;
-    const sandbox = gameState.sandboxMode;
-    const rows    = grid.length;
+    const grid = gameState.grid;
+    const rows = grid.length;
     const cols    = grid[0]?.length ?? 0;
 
     for (const row of grid)
@@ -276,18 +313,16 @@ function solveCircuit(): void {
     }
 
     // ── Phase 1: short-circuit check ─────────────────────────────────────────
-    if (!sandbox) {
-        const shortRemoved = twoCore(grid, rows, cols, conductsNoLoad);
-        for (let r = 0; r < rows; r++)
-            for (let c = 0; c < cols; c++)
-                if (grid[r][c].type === 'battery' && !shortRemoved[r][c]) {
-                    const path = findBatteryCycle(grid, shortRemoved, r, c);
-                    for (const [pr, pc] of path) grid[pr][pc].shortPath = true;
-                    _commit(false, true,
-                        'Short circuit! Every path from the battery needs a Bulb or Resistor.');
-                    return;
-                }
-    }
+    const shortRemoved = twoCore(grid, rows, cols, conductsNoLoad);
+    for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++)
+            if (grid[r][c].type === 'battery' && !shortRemoved[r][c]) {
+                const path = findBatteryCycle(grid, shortRemoved, r, c);
+                for (const [pr, pc] of path) grid[pr][pc].shortPath = true;
+                _commit(false, true,
+                    'Short circuit! Every path from the battery needs a Bulb or Resistor.');
+                return;
+            }
 
     // ── Phase 2: valid-circuit check ─────────────────────────────────────────
     const fullRemoved = twoCore(grid, rows, cols, conducts);
@@ -340,11 +375,18 @@ function solveCircuit(): void {
             }
         }
 
+    const al = grid.flat().filter(c => c.type === 'light' && c.lit).length;
+    const tl = grid.flat().filter(c => c.type === 'light').length;
+
     let hint: string;
     if (anySolved) {
-        const al = grid.flat().filter(c => c.type === 'light' && c.lit).length;
-        const tl = grid.flat().filter(c => c.type === 'light').length;
-        hint = tl > 0 ? `✓ Circuit complete! ${al}/${tl} bulbs lit.` : '✓ Circuit complete!';
+        const level = levels[gameState.levelIndex];
+        const goalMet = level?.checkGoal(grid, al, tl);
+        if (goalMet) {
+            hint = tl > 0 ? `🏆 Goal complete! ${al}/${tl} bulbs lit.` : '🏆 Goal complete!';
+        } else {
+            hint = levelProgressHint(grid, al, tl);
+        }
     } else {
         hint = openCircuitHint(grid);
     }
@@ -360,9 +402,11 @@ function _commit(solved: boolean, sc: boolean, hint: string): void {
     gameState.activeLights = flat.filter(c => c.type === 'light' && c.lit).length;
     gameState.totalLights  = flat.filter(c => c.type === 'light').length;
 
-    if (solved && !sc && gameState.activeLights > 0 &&
-        gameState.activeLights === gameState.totalLights) {
-        uiState.goalReached = true;
+    if (solved && !sc) {
+        const level = levels[gameState.levelIndex];
+        if (level?.checkGoal(gameState.grid, gameState.activeLights, gameState.totalLights)) {
+            uiState.goalReached = true;
+        }
     }
 }
 
@@ -392,35 +436,55 @@ export function toggleSwitch(r: number, c: number): void {
 
 export function resetLevel(): void {
     const lvl = levels[gameState.levelIndex];
-    gameState.grid         = emptyGrid(lvl.rows, lvl.cols);
-    gameState.solved       = false;
-    gameState.shortCircuit = false;
-    gameState.hint         = lvl.description;
-    gameState.activeLights = 0;
-    gameState.totalLights  = 0;
-    uiState.goalReached    = false;
-    uiState.aiPrompt       = '';
-    uiState.aiResponse     = '';
+    gameState.grid            = emptyGrid(lvl.rows, lvl.cols);
+    gameState.solved          = false;
+    gameState.shortCircuit    = false;
+    gameState.hint            = lvl.description;
+    gameState.goalDescription = lvl.goalDescription;
+    gameState.activeLights    = 0;
+    gameState.totalLights     = 0;
+    uiState.goalReached       = false;
+    uiState.aiPrompt          = '';
+    uiState.aiResponse        = '';
 }
 
 export function nextLevel(): void {
-    gameState.levelIndex = (gameState.levelIndex + 1) % levels.length;
-    resetLevel();
+    if (gameState.levelIndex < levels.length - 1) {
+        gameState.levelIndex += 1;
+        resetLevel();
+    }
 }
 
-export function toggleSandbox(): void {
-    gameState.sandboxMode = !gameState.sandboxMode;
-    solveCircuit();
+export function prevLevel(): void {
+    if (gameState.levelIndex > 0) {
+        gameState.levelIndex -= 1;
+        resetLevel();
+    }
 }
 
-// Legacy shims so existing imports don't break
 export function startGame(_el: HTMLElement, _opts?: { onGoal?: () => void }): void {
-    uiState.gameType = 'circuitry';
-    gameState.levelIndex = 0;
+    uiState.gameType      = 'circuitry';
+    gameState.sandboxMode = false;
+    gameState.levelIndex  = 0;
     resetLevel();
 }
+
+export function startSandbox(_el: HTMLElement): void {
+    uiState.gameType         = 'circuitry';
+    gameState.sandboxMode    = true;
+    gameState.grid           = emptyGrid(6, 10);
+    gameState.solved         = false;
+    gameState.shortCircuit   = false;
+    gameState.hint           = 'Sandbox mode — build freely, no goal required!';
+    gameState.goalDescription = '';
+    gameState.activeLights   = 0;
+    gameState.totalLights    = 0;
+    uiState.goalReached      = false;
+    uiState.aiPrompt         = '';
+    uiState.aiResponse       = '';
+}
+
 export function resetGame(): void { resetLevel(); }
-export function levelUp():   void { nextLevel();  }
 
 // ── AI ────────────────────────────────────────────────────────────────────────
 
@@ -441,7 +505,8 @@ export async function askAI(userMessage: string): Promise<string> {
 
 export function buildCircuitryContext() {
     return {
-        goal:         gameState.solved ? 'Complete!' : gameState.hint,
+        goal:         gameState.goalDescription,
+        status:       gameState.solved ? 'Complete!' : gameState.hint,
         solved:       gameState.solved,
         shortCircuit: gameState.shortCircuit,
         activeLights: gameState.activeLights,

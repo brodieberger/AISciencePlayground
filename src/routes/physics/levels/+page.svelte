@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { startGame } from '$lib/physics/game.svelte';
-	import { uiState } from '$lib/game-ui.svelte';
+	import { startGame, levelUp } from '$lib/physics/game.svelte';
+	import { uiState, physicsGameState } from '$lib/game-ui.svelte';
+	import { levels } from '$lib/physics/level-data';
 	import GameShell from '$lib/components/GameShell.svelte';
 	import AIPanel from '$lib/components/AIPanel.svelte';
 	import GameControls from '../GameControls.svelte';
@@ -14,6 +15,8 @@
 			onGoal: () => (uiState.goalReached = true)
 		});
 	});
+
+	let hasNextLevel = $derived(physicsGameState.currentLevelIndex < levels.length - 1);
 </script>
 
 <GameShell>
@@ -23,7 +26,12 @@
 	{/snippet}
 
 	{#snippet experiment()}
-		<GoalBanner />
+		<GoalBanner
+			levelName={`Level ${physicsGameState.currentLevelIndex + 1}`}
+			goalDescription="Get the ball to the goal!"
+			{hasNextLevel}
+			onNextLevel={levelUp}
+		/>
 		<div class="game-container" bind:this={gameContainer}></div>
 		<GameControls />
 	{/snippet}

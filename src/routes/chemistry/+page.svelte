@@ -1,7 +1,7 @@
 <!-- src/routes/chemistry/+page.svelte -->
 
 <script lang="ts">
-    import { startGame } from '$lib/chemistry/game.svelte';
+    import { startGame, levelUp, gameState, levels } from '$lib/chemistry/game.svelte';
     import { uiState } from '$lib/game-ui.svelte';
     import GameShell from '$lib/components/GameShell.svelte';
     import AIPanel from '$lib/components/AIPanel.svelte';
@@ -18,6 +18,9 @@
             onGoal: () => (uiState.goalReached = true),
         });
     });
+
+    let currentLevel = $derived(levels[gameState.currentLevelIndex]);
+    let hasNextLevel = $derived(gameState.currentLevelIndex < levels.length - 1);
 </script>
 
 <GameShell>
@@ -27,7 +30,12 @@
     {/snippet}
 
     {#snippet experiment()}
-        <GoalBanner />
+        <GoalBanner
+            levelName={currentLevel?.name}
+            goalDescription={currentLevel?.targetFormula ? `Create ${currentLevel.targetFormula}` : undefined}
+            {hasNextLevel}
+            onNextLevel={levelUp}
+        />
 
         <!-- Main game area: element board + reaction panel side by side -->
         <div class="game-container" bind:this={gameContainer}>
