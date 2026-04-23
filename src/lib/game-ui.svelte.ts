@@ -10,7 +10,8 @@ export const uiState = $state({
 export const physicsGameState = $state({
 	currentLevelIndex: 0,
 	inventory: [] as { type: PrefabType; count: number }[],
-	activePrefab: null as PrefabType | null // what's currently being dragged
+	activePrefab: null as PrefabType | null,
+	cageReleased: false,
 });
 
 export async function askAI(gameType: string, userPrompt: string, context: Record<string, unknown>) {

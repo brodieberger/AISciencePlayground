@@ -171,9 +171,10 @@ function spawnBumper(world: Matter.World, x: number, y: number): Matter.Body {
     return body;
 }
 
-// Constraints created by the most recent spawnSeesaw call that must be removed
-// when the cage is released. game.svelte.ts reads this array after each spawn.
+// pendingSeesawConstraints = [rotLock, ballLock] — removed on cage release.
+// pendingSeesawPivot = permanent pivot — stored separately for undo.
 export let pendingSeesawConstraints: Matter.Constraint[] = [];
+export let pendingSeesawPivot: Matter.Constraint | null = null;
 
 // Seesaw: a compound beam (beam + two cup walls at beam ends) pinned at its
 // centroid. Locked in place via removable constraints until releaseCage() fires.
@@ -251,6 +252,7 @@ function spawnSeesaw(world: Matter.World, x: number, y: number): Matter.Body[] {
         render: { visible: false }
     });
 
+    pendingSeesawPivot = pivot;
     pendingSeesawConstraints = [rotLock, ballLock];
     World.add(world, [base, beam, pivot, rotLock, seesawBall, ballLock]);
 

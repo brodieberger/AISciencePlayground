@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { levelDown, levelUp, releaseCage, resetGame } from '$lib/physics/game.svelte';
+	import { levelDown, levelUp, releaseCage, resetBall, resetGame, undoLastPrefab } from '$lib/physics/game.svelte';
 	import { uiState, physicsGameState } from '$lib/game-ui.svelte';
 	import type { PrefabType } from '$lib/physics/level-data';
 
@@ -36,15 +36,16 @@
 
 <div class="ui">
 	<div class="controls">
-		<button onclick={handleReset}>Reset</button>
-		<button onclick={releaseCage}>Release Cage</button>
-		<button onclick={levelDown}>
-			⬅️
-		</button>
+		<button class="btn-reset" onclick={handleReset}>Reset</button>
+		<button class="btn-undo" onclick={undoLastPrefab}>Undo</button>
+		{#if physicsGameState.cageReleased}
+			<button class="btn-release" onclick={resetBall}>Reset Ball</button>
+		{:else}
+			<button class="btn-release" onclick={releaseCage}>Release Cage</button>
+		{/if}
+		<button class="btn-nav" onclick={levelDown}>⬅️</button>
 		<p>Current Level: {physicsGameState.currentLevelIndex + 1}</p>
-		<button onclick={levelUp}>
-			➡️
-		</button>
+		<button class="btn-nav" onclick={levelUp}>➡️</button>
 	</div>
 
 	{#if physicsGameState.inventory.length > 0}
@@ -99,12 +100,14 @@ button {
 	height: 40px;
 }
 
-button:nth-child(1) { background-color: #ff6666; color: #0b1020; }
-button:nth-child(1):hover { background-color: #ff4444; box-shadow: 0 0 12px #ff4444; }
-button:nth-child(2) { background-color: #66ff66; color: #0b1020; }
-button:nth-child(2):hover { background-color: #44ff44; box-shadow: 0 0 12px #44ff44; }
-button:nth-child(3) { background-color: #66ccff; color: #0b1020; }
-button:nth-child(3):hover { background-color: #33aaff; box-shadow: 0 0 12px #33aaff; }
+.btn-reset    { background-color: #ff6666; color: #0b1020; }
+.btn-reset:hover { background-color: #ff4444; box-shadow: 0 0 12px #ff4444; }
+.btn-undo     { background-color: #ffaa44; color: #0b1020; }
+.btn-undo:hover  { background-color: #ff8800; box-shadow: 0 0 12px #ff8800; }
+.btn-release  { background-color: #66ff66; color: #0b1020; }
+.btn-release:hover { background-color: #44ff44; box-shadow: 0 0 12px #44ff44; }
+.btn-nav      { background-color: #66ccff; color: #0b1020; }
+.btn-nav:hover   { background-color: #33aaff; box-shadow: 0 0 12px #33aaff; }
 
 .inventory {
 	display: flex;

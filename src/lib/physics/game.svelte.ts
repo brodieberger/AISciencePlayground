@@ -9,7 +9,8 @@ import {
     createGeometry,
     cageWalls,
     spawnPrefab,
-    pendingSeesawConstraints
+    pendingSeesawConstraints,
+    pendingSeesawPivot
 } from "./level-creation";
 
 import { levels, type PrefabType } from "./level-data";
@@ -26,7 +27,7 @@ let runner: Matter.Runner;
 let ball: Matter.Body;
 let goal: Matter.Body;
 
-let placedPrefabs: { type: PrefabType; body: Matter.Body | Matter.Body[] }[] = [];
+let placedPrefabs: { type: PrefabType; body: Matter.Body | Matter.Body[]; constraints?: Matter.Constraint[] }[] = [];
 let seesawBeams: Matter.Body[] = [];
 let seesawLocks: Matter.Constraint[] = [];
 let seesawBallBodies: Matter.Body[] = [];
@@ -39,6 +40,7 @@ let ghostPos: { x: number; y: number } | null = null;
 
 let container: HTMLElement;
 let onGoalReached: (() => void) | null = null;
+let keydownHandler: ((e: KeyboardEvent) => void) | null = null;
 
 export function startGame(
     targetContainer: HTMLElement,
@@ -194,9 +196,19 @@ function setupOverlay(w: number, h: number) {
 
     overlayCanvas.addEventListener("mouseleave", () => { ghostPos = null; });
     overlayCanvas.addEventListener("click", onCanvasClick);
+    overlayCanvas.addEventListener("contextmenu", onCanvasRightClick);
     overlayCanvas.addEventListener("dragover", onDragOver);
     overlayCanvas.addEventListener("drop", onDrop);
     overlayCanvas.addEventListener("dragleave", onDragLeave);
+
+    if (keydownHandler) window.removeEventListener("keydown", keydownHandler);
+    keydownHandler = (e: KeyboardEvent) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+            e.preventDefault();
+            undoLastPrefab();
+        }
+    };
+    window.addEventListener("keydown", keydownHandler);
 }
 
 // Seesaw beams are excluded from rotation — they rotate via physics only.
@@ -215,6 +227,46 @@ function tryRotateAt(x: number, y: number) {
 function onCanvasClick(e: MouseEvent) {
     if (physicsGameState.activePrefab) return;
     tryRotateAt(e.offsetX, e.offsetY);
+}
+
+function onCanvasRightClick(e: MouseEvent) {
+    e.preventDefault();
+    removePrefabAt(e.offsetX, e.offsetY);
+}
+
+function removePrefabAt(x: number, y: number) {
+    const allPlaced = placedPrefabs.flatMap(p => Array.isArray(p.body) ? p.body : [p.body]);
+    const hits = Query.point(allPlaced, { x, y });
+    if (hits.length === 0) return;
+
+    const hitBody = hits[hits.length - 1];
+    const idx = placedPrefabs.findIndex(p => {
+        const bodies = Array.isArray(p.body) ? p.body : [p.body];
+        return bodies.some(b => b === hitBody || (b.parts && b.parts.includes(hitBody)));
+    });
+    if (idx === -1) return;
+
+    const entry = placedPrefabs.splice(idx, 1)[0];
+    const bodies = Array.isArray(entry.body) ? entry.body : [entry.body];
+    for (const b of bodies) World.remove(world, b);
+
+    for (const c of entry.constraints ?? []) {
+        World.remove(world, c);
+        const lockIdx = seesawLocks.indexOf(c);
+        if (lockIdx !== -1) seesawLocks.splice(lockIdx, 1);
+    }
+
+    if (entry.type === 'seesaw' && Array.isArray(entry.body)) {
+        const beam = entry.body[0] as Matter.Body;
+        const seesawBall = entry.body[2] as Matter.Body;
+        seesawBeams = seesawBeams.filter(b => b !== beam);
+        seesawBallBodies = seesawBallBodies.filter(b => b !== seesawBall);
+    }
+
+    const slot = physicsGameState.inventory.find(i => i.type === entry.type);
+    if (slot) slot.count++;
+
+    updateAIContext();
 }
 
 function onDragOver(e: DragEvent) {
@@ -244,12 +296,14 @@ function onDrop(e: DragEvent) {
     slot.count--;
 
     const body = spawnPrefab(world, type, x, y);
-    placedPrefabs.push({ type, body });
 
     if (type === 'seesaw' && Array.isArray(body)) {
         seesawBeams.push(body[0]);
         seesawBallBodies.push(body[2] as Matter.Body);
         seesawLocks.push(...pendingSeesawConstraints);
+        placedPrefabs.push({ type, body, constraints: [pendingSeesawPivot!, ...pendingSeesawConstraints] });
+    } else {
+        placedPrefabs.push({ type, body });
     }
 
     if (slot.count === 0) {
@@ -340,10 +394,47 @@ function interpolateColor(from: string, to: string, t: number): string {
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
+export function undoLastPrefab() {
+    const entry = placedPrefabs.pop();
+    if (!entry) return;
+
+    const bodies = Array.isArray(entry.body) ? entry.body : [entry.body];
+    for (const b of bodies) World.remove(world, b);
+
+    for (const c of entry.constraints ?? []) {
+        World.remove(world, c);
+        const idx = seesawLocks.indexOf(c);
+        if (idx !== -1) seesawLocks.splice(idx, 1);
+    }
+
+    if (entry.type === 'seesaw' && Array.isArray(entry.body)) {
+        const beam = entry.body[0] as Matter.Body;
+        const seesawBall = entry.body[2] as Matter.Body;
+        seesawBeams = seesawBeams.filter(b => b !== beam);
+        seesawBallBodies = seesawBallBodies.filter(b => b !== seesawBall);
+    }
+
+    const slot = physicsGameState.inventory.find(i => i.type === entry.type);
+    if (slot) slot.count++;
+
+    updateAIContext();
+}
+
 export function releaseCage() {
     cageWalls.forEach((wall) => World.remove(world, wall));
     seesawLocks.forEach((c) => World.remove(world, c));
     seesawLocks = [];
+    physicsGameState.cageReleased = true;
+}
+
+export function resetBall() {
+    World.remove(world, ball);
+    cageWalls.forEach((wall) => World.remove(world, wall));
+    const level = levels[physicsGameState.currentLevelIndex];
+    ball = createBallAndCage(world, level);
+    seesawLaunched = false;
+    physicsGameState.cageReleased = false;
+    updateAIContext();
 }
 
 function resetWorld() {
@@ -359,6 +450,7 @@ function resetWorld() {
     seesawBallBodies = [];
     seesawLaunched = false;
     ghostPos = null;
+    physicsGameState.cageReleased = false;
 
     init();
 }
