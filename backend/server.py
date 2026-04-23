@@ -58,21 +58,21 @@ def ai_hint():
         placed_prefabs = context.get("placedPrefabs", [])
         inventory = context.get("inventory", [])
         solution = context.get("solution", "")
-        prompt = f"""You are a team of scientists inside a 2D physics sandbox for kids.
-
-User question: {user_prompt}
-
-Ball position: {ball}
-Goal position: {goal}
-Placed objects: {placed_prefabs}
-Remaining inventory: {inventory}
-Intended solution: {solution}
-
-REQUIRED: Explain briefly using simple words a child could understand. No more than three sentences.
-Do not use coordinates - describe positions relatively. The ball gains momentum by dropping and rolling.
-Guide the player toward the intended solution without giving it away directly.
-The player must click "Release Ball" to start.
-"""
+        system_prompt = (
+            "You are Lumi, a friendly science helper for kids. "
+            "STRICT RULES: "
+            "1) Reply in 1-2 SHORT sentences only. "
+            "2) Use simple words a 7-year-old would know. "
+            "3) Never reveal the answer — only give a small hint. "
+            "4) Never mention coordinates — use words like left, right, above, below. "
+            "5) Do NOT greet the player or add filler."
+        )
+        user_msg = (
+            f"Question: {user_prompt}\n"
+            f"Ball: {ball}, Goal: {goal}\n"
+            f"Placed: {placed_prefabs}, Inventory: {inventory}\n"
+            f"Solution: {solution}"
+        )
 
     elif game_type == "circuitry":
         goal = context.get("goal", "")
@@ -80,19 +80,20 @@ The player must click "Release Ball" to start.
         short_circuit = context.get("shortCircuit", False)
         active_lights = context.get("activeLights", 0)
         total_lights = context.get("totalLights", 0)
-        prompt = f"""You are an electrical engineer inside a circuitry sandbox for kids.
-
-User question: {user_prompt}
-
-Goal: {goal}
-Solved: {solved}
-Short circuit: {short_circuit}
-Active lights: {active_lights} / {total_lights}
-
-REQUIRED: Explain briefly using simple words a child could understand. No more than three sentences.
-REQUIRED: Never give the direct answer
-Focus on the circuit state and what the player should do next.
-"""
+        system_prompt = (
+            "You are Lumi, a friendly science helper for kids. "
+            "STRICT RULES: "
+            "1) Reply in 1-2 SHORT sentences only. "
+            "2) Use simple words a 7-year-old would know. "
+            "3) Never reveal the answer — only give a small hint. "
+            "4) Do NOT greet the player or add filler."
+        )
+        user_msg = (
+            f"Question: {user_prompt}\n"
+            f"Goal: {goal}, Solved: {solved}\n"
+            f"Short circuit: {short_circuit}\n"
+            f"Lights on: {active_lights}/{total_lights}"
+        )
 
     elif game_type == "chemistry":
         level = context.get("level", "")
@@ -102,31 +103,35 @@ Focus on the circuit state and what the player should do next.
         selected_elements = context.get("selectedElements", [])
         last_result = context.get("lastResult", None)
         goal_reached = context.get("goalReached", False)
-        prompt = f"""You are a chemist inside a chemistry sandbox for kids.
-
-User question: {user_prompt}
-
-Level: {level}
-Target formula: {goal}
-Sandbox mode: {sandbox_mode}
-Available elements: {available_elements}
-Currently selected elements: {selected_elements}
-Last reaction result: {last_result}
-Goal reached: {goal_reached}
-
-REQUIRED: Explain briefly using simple words a child could understand. Really dim it down.
-REQUIRED: No more than three sentences!!!!!
-REQUIRED: Never give the direct answer (i.e telling them the exact number of elements they need)
-Focus on which elements to combine to reach the target formula.
-"""
+        system_prompt = (
+            "You are Lumi, a friendly science helper for kids. "
+            "STRICT RULES: "
+            "1) Reply in 1-2 SHORT sentences only. "
+            "2) Use simple words a 7-year-old would know. "
+            "3) Never reveal the answer or exact element counts — only give a small hint. "
+            "4) Do NOT greet the player or add filler."
+        )
+        user_msg = (
+            f"Question: {user_prompt}\n"
+            f"Level: {level}, Target: {goal}\n"
+            f"Sandbox: {sandbox_mode}\n"
+            f"Available: {available_elements}\n"
+            f"Selected: {selected_elements}\n"
+            f"Last result: {last_result}, Goal reached: {goal_reached}"
+        )
 
     else:
-        prompt = f"Game: {game_type}\nContext: {context}\nQuestion: {user_prompt}"
+        system_prompt = "You are Lumi, a friendly science helper for kids. Reply in 1-2 short sentences only."
+        user_msg = f"Game: {game_type}\nContext: {context}\nQuestion: {user_prompt}"
 
     try:
         response = ollama.chat(
             model="phi3",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_msg}
+            ],
+            options={"temperature": 0.5, "num_predict": 120}
         )
         return jsonify({"reply": response['message']['content']})
     except Exception as e:
