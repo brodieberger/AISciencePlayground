@@ -254,7 +254,12 @@ function tryRotateAt(x: number, y: number) {
     updateAIContext();
 }
 
+function isInteractionLocked() {
+    return !isSandbox && physicsGameState.cageReleased;
+}
+
 function onCanvasMouseDown(e: MouseEvent) {
+    if (isInteractionLocked()) return;
     if (sandboxDrawActive) {
         e.preventDefault();
         drawStart = { x: e.offsetX, y: e.offsetY };
@@ -395,6 +400,7 @@ function onCanvasMouseUp(e: MouseEvent) {
 }
 
 function onCanvasClick(e: MouseEvent) {
+    if (isInteractionLocked()) return;
     if (skipNextClick) { skipNextClick = false; return; }
     if (physicsGameState.activePrefab) return;
     if (sandboxDrawActive) return;
@@ -403,6 +409,7 @@ function onCanvasClick(e: MouseEvent) {
 
 function onCanvasRightClick(e: MouseEvent) {
     e.preventDefault();
+    if (isInteractionLocked()) return;
     removePrefabAt(e.offsetX, e.offsetY);
 }
 
@@ -464,6 +471,7 @@ function onDragLeave() {
 function onDrop(e: DragEvent) {
     e.preventDefault();
     ghostPos = null;
+    if (isInteractionLocked()) return;
 
     const type = physicsGameState.activePrefab;
     if (!type) return;
@@ -546,17 +554,29 @@ function drawGhost(type: PrefabType, x: number, y: number) {
             overlayCtx.arc(0, 0, 20, 0, Math.PI * 2);
             overlayCtx.fill();
             break;
-        case 'seesaw':
+        case 'seesaw': {
+            // Base triangle below beam
             overlayCtx.fillStyle = '#889966';
             overlayCtx.beginPath();
-            overlayCtx.moveTo(0, 36);
-            overlayCtx.lineTo(-12, 0);
-            overlayCtx.lineTo(12, 0);
+            overlayCtx.moveTo(0, 10);
+            overlayCtx.lineTo(-26, 62);
+            overlayCtx.lineTo(26, 62);
             overlayCtx.closePath();
             overlayCtx.fill();
+            // Beam
             overlayCtx.fillStyle = '#c8a06a';
-            overlayCtx.fillRect(-110, -6, 220, 12);
+            overlayCtx.fillRect(-120, -10, 240, 20);
+            // Left cup wall
+            overlayCtx.fillRect(-120, -42, 12, 32);
+            // Right cup wall
+            overlayCtx.fillRect(108, -42, 12, 32);
+            // Yellow ball in left cup
+            overlayCtx.fillStyle = '#ffdd44';
+            overlayCtx.beginPath();
+            overlayCtx.arc(-82, -21, 11, 0, Math.PI * 2);
+            overlayCtx.fill();
             break;
+        }
     }
 
     overlayCtx.restore();
@@ -595,6 +615,7 @@ function interpolateColor(from: string, to: string, t: number): string {
 }
 
 export function undoLastPrefab() {
+    if (isInteractionLocked()) return;
     const entry = placedPrefabs.pop();
     if (!entry) return;
 
@@ -725,12 +746,14 @@ export function buildPhysicsContext() {
         mode: isSandbox ? 'sandbox' : 'levels',
         ball: ball.position,
         goal: goal?.position ?? null,
-        placedPrefabs: placedPrefabs.map(p => ({
-            type: p.type,
-            position: Array.isArray(p.body)
-                ? (p.body[0] as Matter.Body).position
-                : (p.body as Matter.Body).position
-        })),
+        placedPrefabs: placedPrefabs.map(p => {
+            const primary = (Array.isArray(p.body) ? p.body[0] : p.body) as Matter.Body;
+            return {
+                type: p.type,
+                position: primary.position,
+                angleDeg: Math.round(primary.angle * (180 / Math.PI)),
+            };
+        }),
         inventory: physicsGameState.inventory.map(i => ({ type: i.type, remaining: i.count })),
         solution: config.solution ?? '',
     };
