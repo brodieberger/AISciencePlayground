@@ -61,7 +61,7 @@ export function createBallAndCage(world: Matter.World, level: LevelConfig) {
 
     const ball = Bodies.circle(x, y, 14, {
         restitution: 0.8,
-        mass: 5,
+        mass: 20,
         friction: 0,
         frictionAir: 0.004,
         frictionStatic: 0,
@@ -171,79 +171,88 @@ function spawnBumper(world: Matter.World, x: number, y: number): Matter.Body {
     return body;
 }
 
-// Seesaw: a dynamic beam pinned at its center to a static triangle base.
-// Returns all bodies so game.svelte.ts can register the beam for angle clamping.
-// The left cup starts with a resting ball; the player drops weight on the right
-// side to tip it and launch that ball toward the goal.
-export interface SeesawBodies {
-    beam: Matter.Body;
-    base: Matter.Body;
-    constraint: Matter.Constraint;
-    seesawBall: Matter.Body;
-}
+// Constraints created by the most recent spawnSeesaw call that must be removed
+// when the cage is released. game.svelte.ts reads this array after each spawn.
+export let pendingSeesawConstraints: Matter.Constraint[] = [];
 
+// Seesaw: a compound beam (beam + two cup walls at beam ends) pinned at its
+// centroid. Locked in place via removable constraints until releaseCage() fires.
+// Avoids isStatic toggling on compound bodies, which is unreliable in Matter.js.
 function spawnSeesaw(world: Matter.World, x: number, y: number): Matter.Body[] {
-    const beamW = 220;
-    const beamH = 12;
-    const pivotOffsetY = 36; // distance from beam center down to triangle tip
+    const beamW = 240;
+    const beamH = 20;
+    const wallW = 12;
+    const wallH = 32;
+    // Walls sit at the very ends of the beam — NOT at the ball position
+    const wallOffX = beamW / 2 - wallW / 2; // 114px from center
+    const ballOffX = 82;                     // ball 82px from center, clear of walls
+    const wallY = y - beamH / 2 - wallH / 2;
 
-    // Static triangle base — visual only, built from a thin tall rectangle
-    // topped by a polygon approximation using a narrow trapezoid stack
-    const baseH = pivotOffsetY;
-    const base = Bodies.trapezoid(x, y + pivotOffsetY / 2, 10, baseH, 1, {
-        isStatic: true,
-        label: 'prefab:seesaw:base',
-        render: { fillStyle: '#889966', strokeStyle: '#aabb77', lineWidth: 2 }
-    });
+    const woodStyle = { fillStyle: '#c8a06a', strokeStyle: '#e0c080', lineWidth: 2 };
 
-    // Dynamic beam — free to rotate, pinned by constraint below
-    const beam = Bodies.rectangle(x, y, beamW, beamH, {
+    const beamPart  = Bodies.rectangle(x,             y,     beamW, beamH, { render: woodStyle });
+    const leftWall  = Bodies.rectangle(x - wallOffX,  wallY, wallW, wallH, { render: woodStyle });
+    const rightWall = Bodies.rectangle(x + wallOffX,  wallY, wallW, wallH, { render: woodStyle });
+
+    const beam = Body.create({
+        parts: [beamPart, leftWall, rightWall],
         isStatic: false,
         label: 'prefab:seesaw:beam',
-        frictionAir: 0.015,   // slight air resistance so it doesn't oscillate forever
-        restitution: 0.1,
-        render: { fillStyle: '#c8a06a', strokeStyle: '#e0c080', lineWidth: 2 }
+        density: 0.0003,
+        frictionAir: 0.006,
+        restitution: 0.05,
+        friction: 0.1,
     });
 
-    // Pin the beam's center to the top of the triangle
+    // Permanent pivot — pins beam centroid to its placed world position
     const pivot = Constraint.create({
         bodyA: beam,
-        pointA: { x: 0, y: 0 },           // beam center
-        pointB: { x, y },                  // world position of pivot
+        pointA: { x: 0, y: 0 },
+        pointB: { x: beam.position.x, y: beam.position.y },
         length: 0,
         stiffness: 1,
         render: { visible: false }
     });
 
-    // Cup walls — four thin static bodies acting as left and right cups.
-    // They are separate static bodies; the beam angle clamp in game.svelte.ts
-    // keeps the seesaw from flipping so the cups stay useful.
-    const cupH = 18;
-    const cupW = 6;
-    const armOffset = beamW / 2 - 20; // how far along the beam each cup sits
+    // Rotation lock — a second constraint 40px above centroid prevents any
+    // rotation until removed. Removed by releaseCage() in game.svelte.ts.
+    const rotLock = Constraint.create({
+        bodyA: beam,
+        pointA: { x: 0, y: -40 },
+        pointB: { x: beam.position.x, y: beam.position.y - 40 },
+        length: 0,
+        stiffness: 1,
+        render: { visible: false }
+    });
 
-    const leftWallL  = Bodies.rectangle(x - armOffset - 12, y - cupH / 2, cupW, cupH, cupWallStyle());
-    const leftWallR  = Bodies.rectangle(x - armOffset + 12, y - cupH / 2, cupW, cupH, cupWallStyle());
-    const rightWallL = Bodies.rectangle(x + armOffset - 12, y - cupH / 2, cupW, cupH, cupWallStyle());
-    const rightWallR = Bodies.rectangle(x + armOffset + 12, y - cupH / 2, cupW, cupH, cupWallStyle());
+    const base = Bodies.trapezoid(x, y + beamH / 2 + 28, 14, 52, 1, {
+        isStatic: true,
+        label: 'prefab:seesaw:base',
+        render: { fillStyle: '#889966', strokeStyle: '#aabb77', lineWidth: 2 }
+    });
 
-    // Ball pre-seated in the left cup
-    const seesawBall = Bodies.circle(x - armOffset, y - beamH / 2 - 14, 12, {
-        restitution: 0.4,
+    // Yellow ball pre-seated in the left cup — also pinned until release
+    const ballR = 11;
+    const seesawBall = Bodies.circle(x - ballOffX, y - beamH / 2 - ballR, ballR, {
+        restitution: 0.35,
+        friction: 0.02,
+        frictionAir: 0.005,
         label: 'prefab:seesaw:ball',
         render: { fillStyle: '#ffdd44', strokeStyle: '#ffee88', lineWidth: 2 }
     });
 
-    World.add(world, [base, beam, pivot, leftWallL, rightWallR, seesawBall]);
+    const ballLock = Constraint.create({
+        bodyA: seesawBall,
+        pointA: { x: 0, y: 0 },
+        pointB: { x: seesawBall.position.x, y: seesawBall.position.y },
+        length: 0,
+        stiffness: 1,
+        render: { visible: false }
+    });
 
-    // Return beam first — game.svelte.ts uses index 0 to identify it for clamping
-    return [beam, base, leftWallL, leftWallR, rightWallL, rightWallR, seesawBall];
-}
+    pendingSeesawConstraints = [rotLock, ballLock];
+    World.add(world, [base, beam, pivot, rotLock, seesawBall, ballLock]);
 
-function cupWallStyle() {
-    return {
-        isStatic: true,
-        label: 'prefab:seesaw:cup',
-        render: { fillStyle: '#c8a06a', strokeStyle: '#e0c080', lineWidth: 2 }
-    };
+    // beam at index 0 — game.svelte.ts uses this for angle clamping
+    return [beam, base, seesawBall];
 }

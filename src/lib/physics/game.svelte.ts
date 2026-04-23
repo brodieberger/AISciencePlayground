@@ -8,14 +8,15 @@ import {
     createGoal,
     createGeometry,
     cageWalls,
-    spawnPrefab
+    spawnPrefab,
+    pendingSeesawConstraints
 } from "./level-creation";
 
 import { levels, type PrefabType } from "./level-data";
 
 const { Engine, World, Render, Runner, Events, Body, Query } = Matter;
 
-const SEESAW_MAX_ANGLE = (40 * Math.PI) / 180;
+const SEESAW_MAX_ANGLE = (65 * Math.PI) / 180;
 
 let engine: Matter.Engine;
 let world: Matter.World;
@@ -27,6 +28,9 @@ let goal: Matter.Body;
 
 let placedPrefabs: { type: PrefabType; body: Matter.Body | Matter.Body[] }[] = [];
 let seesawBeams: Matter.Body[] = [];
+let seesawLocks: Matter.Constraint[] = [];
+let seesawBallBodies: Matter.Body[] = [];
+let seesawLaunched = false;
 
 let overlayCanvas: HTMLCanvasElement;
 let overlayCtx: CanvasRenderingContext2D;
@@ -134,6 +138,28 @@ function init() {
                 });
                 animateBouncePad(pad);
             }
+
+            const isSeesawBeam = (b: Matter.Body) => b.label === 'prefab:seesaw:beam';
+            if (
+                !seesawLaunched &&
+                ((bodyA === ball && isSeesawBeam(bodyB)) ||
+                 (bodyB === ball && isSeesawBeam(bodyA)))
+            ) {
+                seesawLaunched = true;
+                const impactSpeed = Math.hypot(ball.velocity.x, ball.velocity.y);
+                const launchSpeed = Math.max(28, impactSpeed * 1.8);
+
+                setTimeout(() => {
+                    for (const sb of seesawBallBodies) {
+                        // Determine launch direction from beam angle at fire time
+                        const beam = isSeesawBeam(bodyA) ? bodyA : bodyB;
+                        // Ball is in the left cup — it launches upward and slightly toward goal
+                        const vx = Math.sin(beam.angle) * launchSpeed * 0.4;
+                        const vy = -launchSpeed;
+                        Body.setVelocity(sb, { x: vx, y: vy });
+                    }
+                }, 200);
+            }
         });
     });
 
@@ -144,10 +170,8 @@ function clampSeesaws() {
     for (const beam of seesawBeams) {
         if (beam.angle > SEESAW_MAX_ANGLE) {
             Body.setAngle(beam, SEESAW_MAX_ANGLE);
-            Body.setAngularVelocity(beam, 0);
         } else if (beam.angle < -SEESAW_MAX_ANGLE) {
             Body.setAngle(beam, -SEESAW_MAX_ANGLE);
-            Body.setAngularVelocity(beam, 0);
         }
     }
 }
@@ -178,7 +202,7 @@ function setupOverlay(w: number, h: number) {
 function tryRotateAt(x: number, y: number) {
     const rotatableBodies = placedPrefabs
         .flatMap(p => Array.isArray(p.body) ? p.body : [p.body])
-        .filter(b => b.label !== 'prefab:seesaw:beam' && b.label !== 'prefab:seesaw:cup');
+        .filter(b => !b.label.startsWith('prefab:seesaw:'));
 
     const hits = Query.point(rotatableBodies, { x, y });
     if (hits.length === 0) return;
@@ -223,6 +247,8 @@ function onDrop(e: DragEvent) {
 
     if (type === 'seesaw' && Array.isArray(body)) {
         seesawBeams.push(body[0]);
+        seesawBallBodies.push(body[2] as Matter.Body);
+        seesawLocks.push(...pendingSeesawConstraints);
     }
 
     if (slot.count === 0) {
@@ -315,6 +341,8 @@ function interpolateColor(from: string, to: string, t: number): string {
 
 export function releaseCage() {
     cageWalls.forEach((wall) => World.remove(world, wall));
+    seesawLocks.forEach((c) => World.remove(world, c));
+    seesawLocks = [];
 }
 
 function resetWorld() {
@@ -326,6 +354,9 @@ function resetWorld() {
     container.innerHTML = "";
     placedPrefabs = [];
     seesawBeams = [];
+    seesawLocks = [];
+    seesawBallBodies = [];
+    seesawLaunched = false;
     ghostPos = null;
 
     init();

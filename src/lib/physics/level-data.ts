@@ -107,7 +107,6 @@ export const levels: LevelConfig[] = [
             { type: 'seesaw', count: 1 },
         ],
         geometry: [
-            { type: 'rect', x: 190, y: 270, w: 14, h: 240 },
             { type: 'rect', x: 540, y: 310, w: 200, h: 14 },
             { type: 'rect', x: 390, y: 490, w: 260, h: 14 },
         ],
