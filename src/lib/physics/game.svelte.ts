@@ -98,9 +98,10 @@ function init() {
 
     Events.on(engine, "collisionStart", (event) => {
         event.pairs.forEach(({ bodyA, bodyB }) => {
+            const isScoring = (b: Matter.Body) => b === ball || b.label === 'prefab:seesaw:ball';
             if (
-                (bodyA === ball && bodyB === goal) ||
-                (bodyA === goal && bodyB === ball)
+                (isScoring(bodyA) && bodyB === goal) ||
+                (isScoring(bodyB) && bodyA === goal)
             ) {
                 if (onGoalReached) onGoalReached();
             }

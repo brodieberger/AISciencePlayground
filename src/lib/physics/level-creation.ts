@@ -60,9 +60,9 @@ export function createBallAndCage(world: Matter.World, level: LevelConfig) {
     const thickness = 6;
 
     const ball = Bodies.circle(x, y, 14, {
-        restitution: 0.8,
-        mass: 20,
-        friction: 0,
+        restitution: 0.85,
+        density: 0.05,
+        friction: 0.0001,
         frictionAir: 0.004,
         frictionStatic: 0,
         render: { fillStyle: "#ffffff" },
@@ -237,6 +237,7 @@ function spawnSeesaw(world: Matter.World, x: number, y: number): Matter.Body[] {
         restitution: 0.35,
         friction: 0.02,
         frictionAir: 0.005,
+        density: 0.001,
         label: 'prefab:seesaw:ball',
         render: { fillStyle: '#ffdd44', strokeStyle: '#ffee88', lineWidth: 2 }
     });
